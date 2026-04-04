@@ -2,12 +2,16 @@ import os
 import telebot
 from flask import Flask, request
 
-
-# ከ database.py ፋይል ላይ አስፈላጊ የሆኑ ተግባራትን Import እናደርጋለን
-from api.database import register_user, get_user_lang, update_user_lang, get_all_winners
-# ከዚህ በፊት ከነበሩት imports ቀጥሎ ጨምረው
-from api.lottery import show_lottery_types, show_payment_options, create_chapa_payment
-
+# በ Vercel ላይ ፋይሎቹ በአንድ ፎልደር ውስጥ ስላሉ ከፊት ለፊቱ ነጥብ (.) እንጠቀማለን
+# ወይም ቀጥታ ስማቸውን ብቻ መጥራት ይቻላል
+try:
+    from database import register_user, get_user_lang, update_user_lang, get_all_winners
+    from lottery import show_lottery_types, show_payment_options, create_chapa_payment
+except ImportError:
+    # ይህ ደግሞ በሎካል ኮምፒውተር ላይ ስትሞክረው እንዳይሳሳት ይረዳል
+    from api.database import register_user, get_user_lang, update_user_lang, get_all_winners
+    from api.lottery import show_lottery_types, show_payment_options, create_chapa_payment
+    
 # የቦቱን Token ከ Vercel Environment Variables ያነባል
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN, threaded=False)
