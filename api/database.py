@@ -72,21 +72,10 @@ def record_winner(user_id, ticket_num, lottery_name, prize):
     return supabase.table("winners").insert(data).execute()
 
 def get_all_winners(limit=10):
-    """የመጨረሻዎቹን አሸናፊዎች ከነ ስማቸው ያመጣል (ከ Users Table ጋር በማገናኘት)"""
-    # ማሳሰቢያ፡ በ Supabase ላይ በ Winners እና በ Users መሃል Foreign Key መኖር አለበት
+    """የመጨረሻዎቹን አሸናፊዎች ከነ ስማቸው ያመጣል"""
     try:
+        # በ Winners እና በ Users መሃል Foreign Key መኖር አለበት
         return supabase.table("winners").select("*, users(full_name)").order("won_at", desc=True).limit(limit).execute()
-    except Exception as e:
-        print(f"Error fetching winners: {e}")
-        # Foreign Key ካልሰራ ስሙን ሳይጨምር ዝርዝሩን ብቻ ያመጣል
+    except Exception:
+        # Foreign Key ካልሰራ ዝርዝሩን ብቻ ያመጣል
         return supabase.table("winners").select("*").order("won_at", desc=True).limit(limit).execute()
-
-# --- 5. የሪፈራል ሲስተም (Referral - ለወደፊት ካስፈለገ) ---
-
-def add_referral_point(referrer_id, amount=1):
-    """ሪፈራል ለሚያደርግ ሰው ነጥብ ወይም ብር ይጨምራል"""
-    user = get_user_data(referrer_id)
-    if user:
-        new_balance = float(user.get('balance', 0)) + amount
-        return supabase.table("users").update({"balance": new_balance}).eq("user_id", referrer_id).execute()
-    
