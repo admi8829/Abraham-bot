@@ -3,8 +3,8 @@ import requests
 import random
 import string
 import telebot
-# ከዚህ በፊት እንዲህ ነበረ: from api.database import get_active_lotteries, supabase, save_new_ticket
-# ወደዚህ ቀይረው፦
+
+# በ Vercel ላይ ፋይሎቹ በአንድ ፎልደር ውስጥ ስላሉ እንዲህ እናስገባቸዋለን
 try:
     from database import get_active_lotteries, supabase, save_new_ticket
 except ImportError:
@@ -21,46 +21,53 @@ def generate_ticket_number():
 
 def show_lottery_types(bot, uid, lang):
     """የዕጣ አይነቶችን ከዳታቤዝ አምጥቶ ለተጠቃሚው ያሳያል"""
-    lotteries = get_active_lotteries().data
-    if not lotteries:
-        msg = "⚠️ በአሁኑ ሰዓት ምንም ክፍት ዕጣ የለም።" if lang == "am" else "⚠️ No active lotteries."
-        bot.send_message(uid, msg)
-        return
+    try:
+        res = get_active_lotteries()
+        lotteries = res.data
+        
+        if not lotteries:
+            msg = "⚠️ በአሁኑ ሰዓት ምንም ክፍት ዕጣ የለም።" if lang == "am" else "⚠️ No active lotteries."
+            bot.send_message(uid, msg)
+            return
 
-    markup = telebot.types.InlineKeyboardMarkup()
-    for lott in lotteries:
-        name = lott['name_am'] if lang == "am" else lott['name_en']
-        markup.add(telebot.types.InlineKeyboardButton(
-            f"🎫 {name} - {lott['price']} ETB", 
-            callback_data=f"lott_{lott['id']}"
-        ))
-    
-    msg = "🎫 እባክዎ ሊቆርጡት የሚፈልጉትን የዕጣ አይነት ይምረጡ፦" if lang == "am" else "🎫 Select lottery type:"
-    bot.send_message(uid, msg, reply_markup=markup)
+        markup = telebot.types.InlineKeyboardMarkup()
+        for lott in lotteries:
+            name = lott['name_am'] if lang == "am" else lott['name_en']
+            btn_text = f"🎫 {name} - {lott['price']} ETB"
+            markup.add(telebot.types.InlineKeyboardButton(btn_text, callback_data=f"lott_{lott['id']}"))
+        
+        msg = "🎰 እባክዎ ሊሳተፉበት የሚፈልጉትን የዕጣ አይነት ይምረጡ፦" if lang == "am" else "🎰 Please select a lottery type:"
+        bot.send_message(uid, msg, reply_markup=markup)
+    except Exception as e:
+        print(f"Error in show_lottery_types: {e}")
+        bot.send_message(uid, "❌ መረጃዎችን ማምጣት አልተቻለም።")
 
 def show_payment_options(bot, uid, lott_id, lang):
-    """Automatic (Chapa) ወይም Manual (Screenshot) መምረጫ"""
-    msg = "💳 **የክፍያ መንገድ ይምረጡ / Select Payment**"
+    """የመክፈያ አማራጮችን (Automatic vs Manual) ያሳያል"""
     markup = telebot.types.InlineKeyboardMarkup()
     
-    # Automatic (በ Chapa በኩል)
-    markup.add(telebot.types.InlineKeyboardButton("🤖 Automatic (Chapa)", callback_data=f"pay_auto_{lott_id}"))
-    # Manual (በቴሌብር ልኮ ፎቶ መላክ)
-    markup.add(telebot.types.InlineKeyboardButton("✍️ Manual (Screenshot)", callback_data=f"pay_man_{lott_id}"))
-    
-    bot.send_message(uid, msg, reply_markup=markup, parse_mode="Markdown")
+    if lang == "am":
+        markup.add(telebot.types.InlineKeyboardButton("🤖 በ Chapa (Automatic)", callback_data=f"pay_auto_{lott_id}"))
+        markup.add(telebot.types.InlineKeyboardButton("👤 በባለሙያ (Manual)", callback_data=f"pay_man_{lott_id}"))
+        msg = "💳 እንዴት መክፈል ይፈልጋሉ?"
+    else:
+        markup.add(telebot.types.InlineKeyboardButton("🤖 via Chapa (Automatic)", callback_data=f"pay_auto_{lott_id}"))
+        markup.add(telebot.types.InlineKeyboardButton("👤 Manual Payment", callback_data=f"pay_man_{lott_id}"))
+        msg = "💳 Choose your payment method:"
+        
+    bot.send_message(uid, msg, reply_markup=markup)
 
 def create_chapa_payment(bot, uid, lott_id, amount, name):
-    """ወደ Chapa የመክፈያ ሊንክ የሚወስድ ሲስተም"""
+    """የ Chapa ክፍያ ሊንክ ይፈጥራል"""
     ticket_num = generate_ticket_number()
-    # tx_ref ለክፍያ ማረጋገጫነት ያገለግላል (ትኬት ቁጥርና የሰውየው ID ይይዛል)
+    # tx_ref ለክፍያ ማረጋገጫነት ያገለግላል (winx-ትኬት-UID-LID)
     tx_ref = f"winx-{ticket_num}-{uid}-{lott_id}"
 
     payload = {
         "amount": str(amount),
         "currency": "ETB",
         "email": f"user{uid}@telegram.com",
-        "first_name": name,
+        "first_name": name if name else "Player",
         "tx_ref": tx_ref,
         "callback_url": CALLBACK_URL,
         "customization": {
@@ -83,11 +90,16 @@ def create_chapa_payment(bot, uid, lott_id, amount, name):
             markup = telebot.types.InlineKeyboardMarkup()
             markup.add(telebot.types.InlineKeyboardButton("💳 አሁኑኑ ይክፈሉ (Pay Now)", url=checkout_url))
             
-            bot.send_message(uid, f"🚀 **ክፍያ ለመፈጸም ተዘጋጅቷል!**\n\nዕጣ፦ {amount} ETB\nትኬት ቁጥር፦ `{ticket_num}`\n\nከታች ያለውን በተን ተጭነው ይክፈሉ፦", 
-                             reply_markup=markup, parse_mode="Markdown")
+            msg = (f"🚀 **ክፍያ ለመፈጸም ተዘጋጅቷል!**\n\n"
+                   f"💰 የክፍያ መጠን፦ {amount} ETB\n"
+                   f"🎫 የሚቆረጠው ትኬት፦ `{ticket_num}`\n\n"
+                   f"ከታች ያለውን ቁልፍ ተጭነው ክፍያውን እንደጨረሱ ትኬቱ በራስ-ሰር ይላክለታል።")
+            bot.send_message(uid, msg, parse_mode="Markdown", reply_markup=markup)
         else:
+            print(f"Chapa Error: {res_data}")
             bot.send_message(uid, "⚠️ የክፍያ ሊንኩን ማዘጋጀት አልተቻለም። እባክዎ ቆይተው ይሞክሩ።")
+            
     except Exception as e:
-        print(f"Chapa Connection Error: {e}")
+        print(f"Network Error: {e}")
         bot.send_message(uid, "❌ ከክፍያ ሲስተሙ ጋር መገናኘት አልተቻለም።")
-  
+        
