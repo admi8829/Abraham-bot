@@ -14,7 +14,7 @@ def welcome(message):
     markup = telebot.types.InlineKeyboardMarkup()
     btn = telebot.types.InlineKeyboardButton("ትኬት ግዛ (10 ETB)", callback_data="buy_ticket")
     markup.add(btn)
-    bot.reply_to(message, "እንኳን ደህና መጣህ! የዕጣ ትኬት ለመግዛት ከታች ያለውን ተጫን።", reply_markup=markup)
+    bot.reply_to(message, "እንኳን ደህና መጣህ! የዕጣ ጨዋታዎች ነው ትኬት ለመግዛት ከታች ያለውን ተጫን።", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "buy_ticket")
 def start_payment(call):
