@@ -106,22 +106,40 @@ def handle_all_messages(message):
         bot.send_message(uid, info_text, parse_mode="Markdown")
 
 # --- 5. የቋንቋ ምርጫ Callback ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
-def lang_callback(call):
+@bot.callback_query_handler(func=lambda call: True)
+def callback_all(call):
     uid = call.message.chat.id
-    new_lang = call.data.split("_")[1]
-    
-    # ቋንቋውን በዳታቤዝ ውስጥ እናዘምናለን
-    update_user_lang(uid, new_lang)
-    s = strings[new_lang]
-    
-    bot.answer_callback_query(call.id, s["changed"])
-    
-    # አዲሱን ቋንቋ እና ሜኑ ይልካል
-    bot.send_message(uid, s["changed"], reply_markup=get_main_menu(new_lang))
-    
-    # የቆየውን ምርጫ ያጠፋል
-    bot.delete_message(uid, call.message.message_id)
+    data = call.data
+    lang = get_user_lang(uid)
+
+    # ሀ. ቋንቋ መቀየሪያ (ቀድሞ የነበረው)
+    if data.startswith("set_"):
+        new_lang = data.split("_")[1]
+        update_user_lang(uid, new_lang)
+        bot.send_message(uid, strings[new_lang]["changed"], reply_markup=get_main_menu(new_lang))
+        bot.delete_message(uid, call.message.message_id)
+
+    # ለ. የእጣ አይነት ሲመረጥ (አዲስ የሚጨመር)
+    elif data.startswith("lott_"):
+        lott_id = data.split("_")[1]
+        # ተጠቃሚው Manual ወይስ Auto እንዲከፍል ምርጫ እናሳያለን
+        show_payment_options(bot, uid, lott_id, lang)
+        bot.delete_message(uid, call.message.message_id)
+
+    # ሐ. በ Chapa (Automatic) መክፈል ሲመርጥ (አዲስ የሚጨመር)
+    elif data.startswith("pay_auto_"):
+        lott_id = data.split("_")[2]
+        # ከዳታቤዝ ዋጋውን አምጥተን ወደ Chapa እንልካለን
+        from api.database import supabase
+        lott_data = supabase.table("lotteries").select("*").eq("id", lott_id).execute().data[0]
+        
+        # የ Chapa ሊንክ ይፈጠራል
+        create_chapa_payment(bot, uid, lott_id, lott_data['price'], f"user{uid}@telegram.com", call.from_user.first_name)
+
+    # መ. በሰው (Manual) መክፈል ሲመርጥ (አዲስ የሚጨመር)
+    elif data.startswith("pay_man_"):
+        bot.send_message(uid, "🙏 እባክዎ ክፍያውን በ Telebirr 0963959697 ይላኩና የደረሰኙን ፎቶ (Screenshot) እዚህ ይላኩ።")
+        
 
 # --- 6. Vercel Webhook Configuration ---
 @app.route('/', methods=['POST'])
