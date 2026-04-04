@@ -1,55 +1,39 @@
 import os
 import telebot
-import time
 from flask import Flask, request
+
+# ከሌሎች ፋይሎች አስፈላጊ የሆኑ ፈንክሽኖችን Import እናደርጋለን
+from api.database import register_user, get_user_lang, update_user_lang, get_all_winners
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# ያንተ GIF ID
+# ያንተ GIF/Video ID
 MY_GIF_ID = "CgACAgQAAxkBAAICamnQ4Te5nXpICkuvCyQsEZk0y3O4AALWHAACQtCJUjnn_dB6DekvOwQ"
 
-# ተጠቃሚዎች የመረጡትን ቋንቋ ለጊዜው ለማስታወስ (Memory Storage)
-# ማሳሰቢያ፡ ሰርቨሩ Restart ካደረገ ወደ English ይመለሳል። ለቋሚነት Database ያስፈልጋል።
-user_languages = {}
-
+# --- 1. የጽሁፎች ማከማቻ (Strings) ---
 strings = {
     "en": {
-        "welcome": "👋 **Welcome, {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **Our Premium Services**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **Support:** +251963959697\n📢 **Telegram:** [Social Gebeya](https://t.me/Social_Gebeya)\n\n📍 *Select a service from the menu below to start your journey.*",
+        "welcome": "👋 **Welcome, {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **PREMIUM SERVICES**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **Phone:** +251963959697\n📢 **Channel:** [Join Social Gebeya](https://t.me/Social_Gebeya)\n\n📍 *Select a service from the menu below:*",
         "buy": "➕ Buy Ticket", "info": "👤 My Info", "win": "🎁 Winners",
         "ref": "👥 Referral", "help": "💡 Help", "lang": "🌐 Language",
-        "lang_msg": "📌 **Please select your language:**",
-        "changed": "✅ Language updated to English!"
+        "lang_msg": "📌 **Select your preferred language:**",
+        "changed": "✅ Language set to English!",
+        "no_win": "⚠️ No winners recorded yet."
     },
     "am": {
-        "welcome": "👋 **እንኳን በደህና መጡ፣ {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **የእኛ ምርጥ አገልግሎቶች**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **ስልክ:** +251963959697\n📢 **ቴሌግራም:** [ሶሻል ገበያ](https://t.me/Social_Gebeya)\n\n📍 *ለመጀመር ከታች ካሉት አማራጮች አንዱን ይምረጡ።*",
+        "welcome": "👋 **እንኳን ደህና መጡ፣ {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **የእኛ ምርጥ አገልግሎቶች**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **ስልክ:** +251963959697\n📢 **ቻናል:** [ሶሻል ገበያ](https://t.me/Social_Gebeya)\n\n📍 *ለመጀመር ከታች ካሉት አማራጮች አንዱን ይምረጡ፦*",
         "buy": "➕ አዲስ ትኬት ቁረጥ", "info": "👤 የእኔ መረጃ", "win": "🎁 አሸናፊዎች",
         "ref": "👥 ጓደኛ ጋብዝ", "help": "💡 እገዛ", "lang": "🌐 ቋንቋ",
         "lang_msg": "📌 **እባክዎ ቋንቋ ይምረጡ፦**",
-        "changed": "✅ ቋንቋ ወደ አማርኛ ተቀይሯል!"
-    },
-    "or": {
-        "welcome": "👋 **Baga Nagaan Dhuftan, {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **Tajaajila Keenya**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **Bilbila:** +251963959697\n📢 **Telegram:** [Social Gebeya](https://t.me/Social_Gebeya)\n\n📍 *Tajaajila eegaluf filannoowwan gadii fayyadamaa.*",
-        "buy": "➕ Tikkee Bitadhu", "info": "👤 Odeeffannoo Koo", "win": "🎁 Mo'attoota",
-        "ref": "👥 Nama Affeeruuf", "help": "💡 Gargaarsa", "lang": "🌐 Afaan",
-        "lang_msg": "📌 **Maaloo Afaan filadhu:**",
-        "changed": "✅ Afaan gara Oromootti jijjiirameera!"
+        "changed": "✅ ቋንቋ ወደ አማርኛ ተቀይሯል!",
+        "no_win": "⚠️ እስካሁን ምንም አሸናፊ አልተመዘገበም።"
     }
 }
 
-# --- 1. Inline Buttons (Social Links) ---
-def welcome_inline_buttons():
-    markup = telebot.types.InlineKeyboardMarkup(row_width=2)
-    btn_web = telebot.types.InlineKeyboardButton("🌐 Website", url="https://yourwebsite.com")
-    btn_con = telebot.types.InlineKeyboardButton("📩 Contact Us", url="https://t.me/your_admin")
-    btn_tik = telebot.types.InlineKeyboardButton("🎬 TikTok", url="https://tiktok.com/@your_id")
-    markup.add(btn_web, btn_con)
-    markup.add(btn_tik)
-    return markup
-
-# --- 2. Main Menu (Reply Keyboard) ---
-def main_menu_keyboard(lang="en"):
+# --- 2. የዲዛይን በተኖች (Keyboards) ---
+def get_main_menu(lang="en"):
     s = strings[lang]
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(telebot.types.KeyboardButton(s["buy"]))
@@ -58,92 +42,72 @@ def main_menu_keyboard(lang="en"):
     markup.add(telebot.types.KeyboardButton(s["lang"]))
     return markup
 
-# --- 3. Language Inline ---
-def language_inline():
+def lang_inline():
     markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(telebot.types.InlineKeyboardButton("🇺🇸 English", callback_data="setlang_en"),
-               telebot.types.InlineKeyboardButton("🇪🇹 አማርኛ", callback_data="setlang_am"),
-               telebot.types.InlineKeyboardButton("🇪🇹 Afaan Oromoo", callback_data="setlang_or"))
+    markup.add(telebot.types.InlineKeyboardButton("🇺🇸 English", callback_data="set_en"),
+               telebot.types.InlineKeyboardButton("🇪🇹 አማርኛ", callback_data="set_am"))
     return markup
 
-# --- 4. Start Handler ---
+# --- 3. የ /start ትዕዛዝ ---
 @bot.message_handler(commands=['start'])
-def handle_start(message):
-    user_id = message.chat.id
-    # ተጠቃሚው በፊት የመረጠው ቋንቋ ካለ እሱን ይጠቀማል፣ ከሌለ English
-    lang = user_languages.get(user_id, "en")
+def start_cmd(message):
+    uid, name = message.chat.id, message.from_user.first_name
     
-    bot.send_chat_action(user_id, 'upload_video')
+    # ተጠቃሚውን ዳታቤዝ ላይ ይመዘግባል (ከ database.py የመጣ)
+    register_user(uid, name)
+    lang = get_user_lang(uid)
     
     bot.send_animation(
-        chat_id=user_id,
-        animation=MY_GIF_ID,
-        caption=strings[lang]["welcome"].format(name=message.from_user.first_name),
-        reply_markup=welcome_inline_buttons(),
-        parse_mode="Markdown"
+        uid, MY_GIF_ID, 
+        caption=strings[lang]["welcome"].format(name=name),
+        parse_mode="Markdown",
+        reply_markup=get_main_menu(lang)
     )
-    # ያለምንም ተጨማሪ ጽሁፍ ሜኑውን ብቻ ያያይዛል
-    bot.send_message(user_id, "⚙️", reply_markup=main_menu_keyboard(lang))
-    # ከላይ ያለውን የ "⚙️" ምልክት ቶሎ ለማጥፋት (አማራጭ)
-    # bot.delete_message(user_id, msg.message_id)
 
-# --- 5. Message Handler ---
-@bot.message_handler(func=lambda message: True)
-def handle_messages(message):
-    user_id = message.chat.id
-    text = message.text
-    lang = user_languages.get(user_id, "en")
+# --- 4. የመልዕክት ማጣሪያ ---
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
+    uid, text = message.chat.id, message.text
+    lang = get_user_lang(uid)
     s = strings[lang]
 
-    bot.send_chat_action(user_id, 'typing')
-
     if text == s["lang"]:
-        bot.send_message(user_id, s["lang_msg"], reply_markup=language_inline(), parse_mode="Markdown")
-    
-    elif text == s["info"]:
-        dashboard = (
-            f"📊 **DASHBOARD**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 **Name:** {message.from_user.first_name}\n"
-            f"🆔 **User ID:** `{user_id}`\n"
-            f"🎟 **My Tickets:** 0\n"
-            f"👥 **Referrals:** 0\n"
-            f"━━━━━━━━━━━━━━━━━━━━"
-        )
-        bot.send_message(user_id, dashboard, parse_mode="Markdown")
-        
-    elif text == s["buy"]:
-        pass # አዲስ ትኬት ሲነካ ዝም ይላል
+        bot.send_message(uid, s["lang_msg"], reply_markup=lang_inline())
 
-# --- 6. Callback for Language ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith('setlang_'))
-def callback_language(call):
-    user_id = call.message.chat.id
-    lang_code = call.data.split('_')[1]
+    elif text == s["win"]:
+        # አሸናፊዎችን ከዳታቤዝ ያመጣል
+        winners = get_all_winners().data
+        if not winners:
+            bot.send_message(uid, s["no_win"])
+            return
+        
+        msg = "🏆 **Recent Winners** 🏆\n\n"
+        for w in winners:
+            msg += f"👤 {w['users']['full_name']} | 🎫 {w['ticket_number']}\n💰 {w['prize_amount']}\n\n"
+        bot.send_message(uid, msg, parse_mode="Markdown")
+
+# --- 5. ቋንቋ መቀየሪያ Callback ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
+def set_language(call):
+    uid = call.message.chat.id
+    new_lang = call.data.split("_")[1]
     
-    # ቋንቋውን በ Memory ውስጥ ያስቀምጠዋል
-    user_languages[user_id] = lang_code
-    s = strings[lang_code]
+    # ቋንቋውን ዳታቤዝ ላይ ያድሳል
+    update_user_lang(uid, new_lang)
+    s = strings[new_lang]
     
     bot.answer_callback_query(call.id, s["changed"])
-    
-    # መልዕክቱን ቀይሮ አዲሱን ሜኑ ያሳያል
-    bot.edit_message_text(
-        f"✨ **{s['changed']}**\n\nClick /start to refresh the welcome screen.",
-        user_id, call.message.message_id, parse_mode="Markdown"
-    )
-    
-    bot.send_message(user_id, "🔄", reply_markup=main_menu_keyboard(lang_code))
+    bot.send_message(uid, s["changed"], reply_markup=get_main_menu(new_lang))
+    bot.delete_message(uid, call.message.message_id)
 
+# --- 6. Vercel Webhook ---
 @app.route('/', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
+        bot.process_new_updates([telebot.types.Update.de_json(request.get_data().decode('utf-8'))])
         return 'ok', 200
     return 'error', 400
 
 @app.route('/')
-def home(): return "Professional Bot is Running!"
+def home(): return "Win-X Bot is Active!"
     
