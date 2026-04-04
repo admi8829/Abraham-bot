@@ -3,109 +3,134 @@ import telebot
 import time
 from flask import Flask, request
 
-# የቦቱን Token ከ Vercel Environment Variables ያነባል
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# ያንተ GIF ID
 MY_GIF_ID = "CgACAgQAAxkBAAICamnQ4Te5nXpICkuvCyQsEZk0y3O4AALWHAACQtCJUjnn_dB6DekvOwQ"
 
-# --- 1. ዋናው የሜኑ አደረጃጀት ---
-def main_menu_keyboard():
+# --- 1. የቋንቋ ትርጉሞች (Dictionary) ---
+strings = {
+    "en": {
+        "welcome": "Welcome! Please use the buttons below to navigate.",
+        "buy": "➕ Buy New Ticket",
+        "info": "👤 My Info",
+        "win": "🎁 Winners",
+        "ref": "👥 Referral",
+        "help": "💡 Help & Support",
+        "lang": "🌐 Language",
+        "lang_msg": "Please select your preferred language:",
+        "changed": "Language changed to English!"
+    },
+    "am": {
+        "welcome": "እንኳን ደህና መጡ! ለመቀጠል ከታች ያሉትን በተኖች ይጠቀሙ።",
+        "buy": "➕ አዲስ ትኬት ቁረጥ",
+        "info": "👤 የእኔ መረጃ",
+        "win": "🎁 አሸናፊዎች",
+        "ref": "👥 ጓደኛ ጋብዝ",
+        "help": "💡 እገዛ እና ድጋፍ",
+        "lang": "🌐 ቋንቋ (Language)",
+        "lang_msg": "እባክዎ ቋንቋ ይምረጡ፦",
+        "changed": "ቋንቋ ወደ አማርኛ ተቀይሯል!"
+    },
+    "or": {
+        "welcome": "Baga nagaan dhuftan! Itti fufuuf battoniiwwan gadii fayyadamaa.",
+        "buy": "➕ Tikkee Haaraa Bitadhu",
+        "info": "👤 Odeeffannoo Koo",
+        "win": "🎁 Mo'attoota",
+        "ref": "👥 Nama Affeeruuf",
+        "help": "💡 Gargaarsa",
+        "lang": "🌐 Afaan (Language)",
+        "lang_msg": "Maaloo afaan filadhu:",
+        "changed": "Afaan gara Oromootti jijjiirameera!"
+    }
+}
+
+# --- 2. ዳይናሚክ የሜኑ አደረጃጀት ---
+def main_menu_keyboard(lang="en"):
+    s = strings[lang]
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     
-    btn_buy = telebot.types.KeyboardButton("➕ አዲስ ትኬት ቁረጥ")
-    btn_acc = telebot.types.KeyboardButton("👤 My Info") # የእኔ ሂሳብ ወደ My Info ተቀይሯል
-    btn_win = telebot.types.KeyboardButton("🎁 አሸናፊዎች")
-    btn_ref = telebot.types.KeyboardButton("👥 ጓደኛ ጋብዝ (Referral)")
-    btn_help = telebot.types.KeyboardButton("💡 እገዛ እና ድጋፍ")
-    btn_lang = telebot.types.KeyboardButton("🌐 ቋንቋ (Language)")
-    btn_reg = telebot.types.KeyboardButton("📝 Register", request_contact=True) # ስልክ ለመቀበል
-    
-    markup.add(btn_buy) 
-    markup.add(btn_acc, btn_win)
-    markup.add(btn_ref, btn_help)
-    markup.add(btn_lang, btn_reg)
+    markup.add(telebot.types.KeyboardButton(s["buy"]))
+    markup.add(telebot.types.KeyboardButton(s["info"]), telebot.types.KeyboardButton(s["win"]))
+    markup.add(telebot.types.KeyboardButton(s["ref"]), telebot.types.KeyboardButton(s["help"]))
+    markup.add(telebot.types.KeyboardButton(s["lang"]))
     
     return markup
 
-# --- 2. የቋንቋ ምርጫ ሜኑ (Inline) ---
-def language_keyboard():
+# --- 3. የሊንክ በተኖች (Inline) ---
+def link_buttons():
     markup = telebot.types.InlineKeyboardMarkup()
-    markup.add(telebot.types.InlineKeyboardButton("🇪🇹 Amharic", callback_data="lang_am"))
-    markup.add(telebot.types.InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"))
-    markup.add(telebot.types.InlineKeyboardButton("🇪🇹 Afaan Oromoo", callback_data="lang_or"))
+    btn_web = telebot.types.InlineKeyboardButton("🌐 Website", url="https://example.com") # ሊንኩን እዚህ ቀይረው
+    btn_con = telebot.types.InlineKeyboardButton("📞 Contact Us", url="https://t.me/your_admin_username") # ዩዘርኔም ቀይረው
+    markup.row(btn_web, btn_con)
     return markup
 
-# --- 3. የ /start ትዕዛዝ ---
+# --- 4. የቋንቋ ምርጫ (Inline) ---
+def language_inline():
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("🇺🇸 English", callback_data="setlang_en"))
+    markup.add(telebot.types.InlineKeyboardButton("🇪🇹 አማርኛ", callback_data="setlang_am"))
+    markup.add(telebot.types.InlineKeyboardButton("🇪🇹 Afaan Oromoo", callback_data="setlang_or"))
+    return markup
+
+# --- 5. የ /start ትዕዛዝ ---
 @bot.message_handler(commands=['start'])
 def handle_start(message):
-    # 'Typing' effect ለማሳየት
     bot.send_chat_action(message.chat.id, 'upload_video')
-    time.sleep(1) # ለጥቂት ሰከንድ እንዲቆይ
+    time.sleep(1)
     
-    welcome_text = (
-        f"👋 **ሰላም {message.from_user.first_name}!**\n\n"
-        "ወደ **Smart-X Academy** እንኳን በደህና መጣህ።\n"
-        "ለመቀጠል ከታች ያሉትን በተኖች ተጠቀም።"
-    )
-
+    # መጀመሪያ በ English ይጀምራል
     bot.send_animation(
         chat_id=message.chat.id,
         animation=MY_GIF_ID,
-        caption=welcome_text,
-        reply_markup=main_menu_keyboard(),
+        caption=strings["en"]["welcome"],
+        reply_markup=main_menu_keyboard("en"),
         parse_mode="Markdown"
     )
+    # የሊንክ በተኖቹን ለብቻው ይልካል
+    bot.send_message(message.chat.id, "Quick Links:", reply_markup=link_buttons())
 
-# --- 4. የባተን ክሊኮችን ማስተናገጃ ---
+# --- 6. የባተን ክሊኮችን ማስተናገጃ ---
 @bot.message_handler(func=lambda message: True)
 def handle_messages(message):
-    # ለእያንዳንዱ መልስ 'Typing' effect እንዲኖር
-    bot.send_chat_action(message.chat.id, 'typing')
+    text = message.text
+    user_id = message.chat.id
     
-    if message.text == "🌐 ቋንቋ (Language)":
-        bot.send_message(message.chat.id, "እባክዎ ቋንቋ ይምረጡ / Please select a language:", reply_markup=language_keyboard())
-    
-    elif message.text == "👤 My Info":
-        info = (
-            f"👤 **የእርስዎ መረጃ**\n"
-            f"ስም፦ {message.from_user.first_name}\n"
-            f"ID፦ `{message.from_user.id}`\n"
-            f"ትኬቶች፦ 0"
-        )
-        bot.send_message(message.chat.id, info, parse_mode="Markdown")
+    # የትኛው ቋንቋ እንደተመረጠ ለማወቅ (ለሙከራ ያህል በጽሁፍ እናወዳድራለን)
+    current_lang = "en"
+    for lang, s in strings.items():
+        if text == s["lang"]:
+            bot.send_chat_action(user_id, 'typing')
+            bot.send_message(user_id, s["lang_msg"], reply_markup=language_inline())
+            return
+        if text == s["info"]:
+            bot.send_chat_action(user_id, 'typing')
+            info_text = f"👤 **User Info**\nName: {message.from_user.first_name}\nID: `{user_id}`"
+            bot.send_message(user_id, info_text, parse_mode="Markdown")
+            return
+        if text == s["buy"]:
+            # ለዚህ መልስ አይሰጥም (ዝም ይላል)
+            return
 
-    elif message.text == "➕ አዲስ ትኬት ቁረጥ":
-        bot.send_message(message.chat.id, "💳 ትኬት ለመቁረጥ /pay ብለው ይላኩ።")
-
-    elif message.text == "💡 እገዛ እና ድጋፍ":
-        bot.send_message(message.chat.id, "ማንኛውም ጥያቄ ካለዎት አድሚኑን ያግኙ፦ @SmartX_Support")
-
-# --- 5. ስልክ ቁጥር ሲላክ (Register) ---
-@bot.message_handler(content_types=['contact'])
-def handle_contact(message):
-    bot.send_chat_action(message.chat.id, 'typing')
-    if message.contact is not None:
-        bot.send_message(
-            message.chat.id, 
-            f"✅ ተመዝግቧል!\nስም፦ {message.from_user.first_name}\nስልክ፦ {message.contact.phone_number}",
-            reply_markup=main_menu_keyboard()
-        )
-
-# --- 6. የቋንቋ ምርጫ ሲነካ (Inline Callback) ---
-@bot.callback_query_handler(func=lambda call: call.data.startswith('lang_'))
+# --- 7. የቋንቋ ምርጫ ሲነካ (Callback) ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith('setlang_'))
 def callback_language(call):
-    lang_name = ""
-    if call.data == "lang_am": lang_name = "Amharic"
-    elif call.data == "lang_en": lang_name = "English"
-    elif call.data == "lang_or": lang_name = "Afaan Oromoo"
+    lang_code = call.data.split('_')[1]
+    s = strings[lang_code]
     
-    bot.answer_callback_query(call.id, f"ቋንቋ ወደ {lang_name} ተቀይሯል")
-    bot.edit_message_text(f"✅ ቋንቋ ወደ **{lang_name}** ተቀይሯል።", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+    bot.answer_callback_query(call.id, s["changed"])
+    
+    # ሜኑውን ወደ ተመረጠው ቋንቋ ይቀይራል
+    bot.send_message(
+        call.message.chat.id, 
+        s["changed"], 
+        reply_markup=main_menu_keyboard(lang_code)
+    )
+    # የድሮውን ሜሴጅ ያጠፋዋል
+    bot.delete_message(call.message.chat.id, call.message.message_id)
 
-# --- 7. Vercel Webhook ---
+# --- 8. Vercel Webhook ---
 @app.route('/', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -117,5 +142,4 @@ def webhook():
 
 @app.route('/')
 def home():
-    return "Smart-X Bot is LIVE!"
-    
+    return "Bot is LIVE!"
