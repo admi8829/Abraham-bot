@@ -72,8 +72,7 @@ def start_command(message):
         parse_mode="Markdown",
         reply_markup=get_main_menu(lang)
     )
-
-# --- 4. የመልዕክት ማጣሪያ (Main Logic) ---
+    # --- 4. የመልዕክት ማጣሪያ (Main Logic) ---
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     uid = message.chat.id
@@ -83,11 +82,18 @@ def handle_all_messages(message):
     lang = get_user_lang(uid)
     s = strings.get(lang, strings["en"])
 
+    # 1. ቋንቋ ለመቀየር
     if text == s["lang"]:
         bot.send_message(uid, s["lang_msg"], reply_markup=get_lang_inline())
 
+    # 2. አዲስ ትኬት ለመቁረጥ (አዲስ የተጨመረው ክፍል)
+    elif text == s["buy"]:
+        # ከ lottery.py ፋይል ላይ show_lottery_typesን ይጠራል
+        from api.lottery import show_lottery_types
+        show_lottery_types(bot, uid, lang)
+
+    # 3. አሸናፊዎችን ለማየት
     elif text == s["win"]:
-        # አሸናፊዎችን ከ database.py በኩል እናመጣለን
         winners_res = get_all_winners()
         winners_list = winners_res.data
         
@@ -97,17 +103,15 @@ def handle_all_messages(message):
             
         response = "🏆 **Recent Winners** 🏆\n━━━━━━━━━━━━━━━━━━━━\n"
         for w in winners_list:
-            # በ Winners እና Users መሃል FK ካለ ስሙን ያመጣል፣ ካልሆነ 'User' ይላል
             user_name = w.get('users', {}).get('full_name', 'Player')
             response += f"👤 {user_name} | 🎫 {w['ticket_number']}\n💰 {w['prize_amount']}\n━━━━━━━━━━━━━━━━━━━━\n"
-            
         bot.send_message(uid, response, parse_mode="Markdown")
 
+    # 4. የተጠቃሚው መረጃ
     elif text == s["info"]:
-        # ተጠቃሚው ገና የቆረጠው ትኬት ስለሌለ ለጊዜው 0 ይላል
         info_text = f"📊 **DASHBOARD**\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: {message.from_user.first_name}\n🆔 ID: `{uid}`\n🎟 Tickets: 0\n━━━━━━━━━━━━━━━━━━━━"
         bot.send_message(uid, info_text, parse_mode="Markdown")
-
+    
 # --- 5. የቋንቋ ምርጫ Callback ---
 @bot.callback_query_handler(func=lambda call: True)
 def callback_all(call):
