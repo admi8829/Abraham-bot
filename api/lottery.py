@@ -3,7 +3,12 @@ import requests
 import random
 import string
 import telebot
-from api.database import get_active_lotteries, supabase, save_new_ticket
+# ከዚህ በፊት እንዲህ ነበረ: from api.database import get_active_lotteries, supabase, save_new_ticket
+# ወደዚህ ቀይረው፦
+try:
+    from database import get_active_lotteries, supabase, save_new_ticket
+except ImportError:
+    from api.database import get_active_lotteries, supabase, save_new_ticket
 
 # Chapa ማረጋገጫ (Vercel Settings ላይ መኖሩን አረጋግጥ)
 CHAPA_AUTH_KEY = os.getenv("CHAPA_AUTH_KEY")
