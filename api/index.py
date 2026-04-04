@@ -9,7 +9,7 @@ try:
 except ImportError:
     from api.database import register_user, get_user_lang, update_user_lang, get_all_winners, supabase, save_new_ticket
     from api.lottery import show_lottery_types, show_payment_options, create_chapa_payment
-
+    
 
 # የቦቱን Token ከ Vercel Environment Variables ያነባል
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
