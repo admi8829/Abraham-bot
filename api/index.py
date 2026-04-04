@@ -119,3 +119,8 @@ def webhook():
 @app.route('/')
 def home(): return "Smart-X Raffle Bot is LIVE!"
     
+    @bot.message_handler(content_types=['animation'])
+def get_gif_id(message):
+    # ይሄ ኮድ የ GIF ፋይሉን ID ይነግርሃል
+    bot.reply_to(message, f"የዚህ GIF ID ቁጥር፦\n`{message.animation.file_id}`", parse_mode="Markdown")
+        
