@@ -58,16 +58,15 @@ def show_payment_options(bot, uid, lott_id, lang):
     bot.send_message(uid, msg, reply_markup=markup)
 
 def create_chapa_payment(bot, uid, lott_id, amount, name):
-    """የ Chapa ክፍያ ሊንክ ይፈጥራል"""
+    """ወደ Chapa የመክፈያ ሊንክ የሚወስድ ሲስተም"""
     ticket_num = generate_ticket_number()
-    # tx_ref ለክፍያ ማረጋገጫነት ያገለግላል (winx-ትኬት-UID-LID)
     tx_ref = f"winx-{ticket_num}-{uid}-{lott_id}"
 
     payload = {
         "amount": str(amount),
         "currency": "ETB",
         "email": f"user{uid}@telegram.com",
-        "first_name": name if name else "Player",
+        "first_name": name,
         "tx_ref": tx_ref,
         "callback_url": CALLBACK_URL,
         "customization": {
@@ -85,21 +84,19 @@ def create_chapa_payment(bot, uid, lott_id, amount, name):
         response = requests.post("https://api.chapa.co/v1/transaction/initialize", json=payload, headers=headers)
         res_data = response.json()
 
+        # ✅ ልክ እዚህ መስመር ላይ ነው የምትጨምረው
+        print(f"Chapa Debug: {res_data}") 
+
         if res_data.get('status') == 'success':
             checkout_url = res_data['data']['checkout_url']
             markup = telebot.types.InlineKeyboardMarkup()
             markup.add(telebot.types.InlineKeyboardButton("💳 አሁኑኑ ይክፈሉ (Pay Now)", url=checkout_url))
             
-            msg = (f"🚀 **ክፍያ ለመፈጸም ተዘጋጅቷል!**\n\n"
-                   f"💰 የክፍያ መጠን፦ {amount} ETB\n"
-                   f"🎫 የሚቆረጠው ትኬት፦ `{ticket_num}`\n\n"
-                   f"ከታች ያለውን ቁልፍ ተጭነው ክፍያውን እንደጨረሱ ትኬቱ በራስ-ሰር ይላክለታል።")
-            bot.send_message(uid, msg, parse_mode="Markdown", reply_markup=markup)
+            bot.send_message(uid, f"🚀 **ክፍያ ለመፈጸም ተዘጋጅቷል!**\n\nዕጣ፦ {amount} ETB\nትኬት ቁጥር፦ `{ticket_num}`\n\nከታች ያለውን በተን ተጭነው ይክፈሉ፦", 
+                             reply_markup=markup, parse_mode="Markdown")
         else:
-            print(f"Chapa Error: {res_data}")
             bot.send_message(uid, "⚠️ የክፍያ ሊንኩን ማዘጋጀት አልተቻለም። እባክዎ ቆይተው ይሞክሩ።")
-            
     except Exception as e:
-        print(f"Network Error: {e}")
+        print(f"Chapa Connection Error: {e}")
         bot.send_message(uid, "❌ ከክፍያ ሲስተሙ ጋር መገናኘት አልተቻለም።")
         
