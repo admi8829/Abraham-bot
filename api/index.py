@@ -2,17 +2,18 @@ import os
 import telebot
 from flask import Flask, request
 
-# ከሌሎች ፋይሎች አስፈላጊ የሆኑ ፈንክሽኖችን Import እናደርጋለን
+# ከ database.py ፋይል ላይ አስፈላጊ የሆኑ ተግባራትን Import እናደርጋለን
 from api.database import register_user, get_user_lang, update_user_lang, get_all_winners
 
+# የቦቱን Token ከ Vercel Environment Variables ያነባል
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN, threaded=False)
 app = Flask(__name__)
 
-# ያንተ GIF/Video ID
+# ያንተ ቪዲዮ/GIF ID
 MY_GIF_ID = "CgACAgQAAxkBAAICamnQ4Te5nXpICkuvCyQsEZk0y3O4AALWHAACQtCJUjnn_dB6DekvOwQ"
 
-# --- 1. የጽሁፎች ማከማቻ (Strings) ---
+# --- 1. የቋንቋ እና የጽሁፍ ማከማቻ ---
 strings = {
     "en": {
         "welcome": "👋 **Welcome, {name}!**\n\n━━━━━━━━━━━━━━━━━━━━\n🚀 **PREMIUM SERVICES**\n━━━━━━━━━━━━━━━━━━━━\n\n📞 **Phone:** +251963959697\n📢 **Channel:** [Join Social Gebeya](https://t.me/Social_Gebeya)\n\n📍 *Select a service from the menu below:*",
@@ -34,7 +35,8 @@ strings = {
 
 # --- 2. የዲዛይን በተኖች (Keyboards) ---
 def get_main_menu(lang="en"):
-    s = strings[lang]
+    # ዳታቤዝ ውስጥ ያለው ቋንቋ ባይኖር እንኳ ወደ English Default እንዲያደርግ strings.get ተጠቅመናል
+    s = strings.get(lang, strings["en"])
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add(telebot.types.KeyboardButton(s["buy"]))
     markup.add(telebot.types.KeyboardButton(s["info"]), telebot.types.KeyboardButton(s["win"]))
@@ -42,7 +44,7 @@ def get_main_menu(lang="en"):
     markup.add(telebot.types.KeyboardButton(s["lang"]))
     return markup
 
-def lang_inline():
+def get_lang_inline():
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("🇺🇸 English", callback_data="set_en"),
                telebot.types.InlineKeyboardButton("🇪🇹 አማርኛ", callback_data="set_am"))
@@ -50,13 +52,17 @@ def lang_inline():
 
 # --- 3. የ /start ትዕዛዝ ---
 @bot.message_handler(commands=['start'])
-def start_cmd(message):
-    uid, name = message.chat.id, message.from_user.first_name
+def start_command(message):
+    uid = message.chat.id
+    name = message.from_user.first_name
     
-    # ተጠቃሚውን ዳታቤዝ ላይ ይመዘግባል (ከ database.py የመጣ)
-    register_user(uid, name)
+    # መጀመሪያ ዳታቤዝ ውስጥ ያለውን ቋንቋ እንፈትሻለን (Register ከማድረጋችን በፊት)
     lang = get_user_lang(uid)
     
+    # ተጠቃሚውን ባለበት ቋንቋ ዳታቤዝ ላይ እንመዘግባለን
+    register_user(uid, name, lang)
+    
+    # ቪዲዮውን እና ሜኑውን እንልካለን
     bot.send_animation(
         uid, MY_GIF_ID, 
         caption=strings[lang]["welcome"].format(name=name),
@@ -64,50 +70,73 @@ def start_cmd(message):
         reply_markup=get_main_menu(lang)
     )
 
-# --- 4. የመልዕክት ማጣሪያ ---
-@bot.message_handler(func=lambda m: True)
-def handle_text(message):
-    uid, text = message.chat.id, message.text
+# --- 4. የመልዕክት ማጣሪያ (Main Logic) ---
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    uid = message.chat.id
+    text = message.text
+    
+    # ቋንቋውን ከዳታቤዝ እናነባለን
     lang = get_user_lang(uid)
-    s = strings[lang]
+    s = strings.get(lang, strings["en"])
 
     if text == s["lang"]:
-        bot.send_message(uid, s["lang_msg"], reply_markup=lang_inline())
+        bot.send_message(uid, s["lang_msg"], reply_markup=get_lang_inline())
 
     elif text == s["win"]:
-        # አሸናፊዎችን ከዳታቤዝ ያመጣል
-        winners = get_all_winners().data
-        if not winners:
+        # አሸናፊዎችን ከ database.py በኩል እናመጣለን
+        winners_res = get_all_winners()
+        winners_list = winners_res.data
+        
+        if not winners_list:
             bot.send_message(uid, s["no_win"])
             return
-        
-        msg = "🏆 **Recent Winners** 🏆\n\n"
-        for w in winners:
-            msg += f"👤 {w['users']['full_name']} | 🎫 {w['ticket_number']}\n💰 {w['prize_amount']}\n\n"
-        bot.send_message(uid, msg, parse_mode="Markdown")
+            
+        response = "🏆 **Recent Winners** 🏆\n━━━━━━━━━━━━━━━━━━━━\n"
+        for w in winners_list:
+            # በ Winners እና Users መሃል FK ካለ ስሙን ያመጣል፣ ካልሆነ 'User' ይላል
+            user_name = w.get('users', {}).get('full_name', 'Player')
+            response += f"👤 {user_name} | 🎫 {w['ticket_number']}\n💰 {w['prize_amount']}\n━━━━━━━━━━━━━━━━━━━━\n"
+            
+        bot.send_message(uid, response, parse_mode="Markdown")
 
-# --- 5. ቋንቋ መቀየሪያ Callback ---
+    elif text == s["info"]:
+        # ተጠቃሚው ገና የቆረጠው ትኬት ስለሌለ ለጊዜው 0 ይላል
+        info_text = f"📊 **DASHBOARD**\n━━━━━━━━━━━━━━━━━━━━\n👤 Name: {message.from_user.first_name}\n🆔 ID: `{uid}`\n🎟 Tickets: 0\n━━━━━━━━━━━━━━━━━━━━"
+        bot.send_message(uid, info_text, parse_mode="Markdown")
+
+# --- 5. የቋንቋ ምርጫ Callback ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("set_"))
-def set_language(call):
+def lang_callback(call):
     uid = call.message.chat.id
     new_lang = call.data.split("_")[1]
     
-    # ቋንቋውን ዳታቤዝ ላይ ያድሳል
+    # ቋንቋውን በዳታቤዝ ውስጥ እናዘምናለን
     update_user_lang(uid, new_lang)
     s = strings[new_lang]
     
     bot.answer_callback_query(call.id, s["changed"])
+    
+    # አዲሱን ቋንቋ እና ሜኑ ይልካል
     bot.send_message(uid, s["changed"], reply_markup=get_main_menu(new_lang))
+    
+    # የቆየውን ምርጫ ያጠፋል
     bot.delete_message(uid, call.message.message_id)
 
-# --- 6. Vercel Webhook ---
+# --- 6. Vercel Webhook Configuration ---
 @app.route('/', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
-        bot.process_new_updates([telebot.types.Update.de_json(request.get_data().decode('utf-8'))])
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
         return 'ok', 200
     return 'error', 400
 
 @app.route('/')
-def home(): return "Win-X Bot is Active!"
+def home():
+    return "Win-X Bot is Active and Running!"
+
+if __name__ == "__main__":
+    app.run()
     
