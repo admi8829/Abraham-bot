@@ -11,7 +11,7 @@ except ImportError:
     from api.database import get_active_lotteries, supabase, save_new_ticket
 
 # --- CONFIGURATION ---
-TOKEN = "7893868461:AAGRFs9oUfKhQNJP1Z_r9TBdYZhppZs_sog"
+TOKEN = "7893868461:AAH4Z9BFMztqmre7BwGn8501vcPo7Ai_Te4"
 ADMIN_ID = 1417184246 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
