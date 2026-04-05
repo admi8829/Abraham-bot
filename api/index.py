@@ -12,7 +12,7 @@ except ImportError:
 
 # --- CONFIGURATION ---
 TOKEN = "7893868461:AAH4Z9BFMztqmre7BwGn8501vcPo7Ai_Te4"
-ADMIN_ID = 1417184246  # ያንተ መለያ ቁጥር
+ADMIN_ID = 7471102761  # ያንተ መለያ ቁጥር
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
