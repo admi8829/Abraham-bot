@@ -133,11 +133,11 @@ def handle_admin_decision(call):
         bot.send_message(target_uid, "❌ ይቅርታ፣ የላኩት ደረሰኝ ተቀባይነት አላገኘም። እባክዎ ትክክለኛውን ደረሰኝ መላክዎን ያረጋግጡ።")
         bot.edit_message_caption(f"🛑 የ {target_uid} ክፍያ ውድቅ ተደርጓል።", call.message.chat.id, call.message.message_id)
 
-# --- VERCEL ROUTE ---
-@app.route('/', methods=['POST', 'GET'])
+# ይህንን ክፍል ፈልገህ ቀይረው
+@app.route('/api/webhook', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'GET':
-        return "Smart-X Bot is Active!", 200
+        return "Bot is Active!", 200
         
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
@@ -145,7 +145,4 @@ def webhook():
         bot.process_new_updates([update])
         return ''
     return 'Forbidden', 403
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
     
