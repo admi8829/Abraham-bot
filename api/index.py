@@ -11,7 +11,7 @@ except ImportError:
     from api.database import get_active_lotteries, supabase, save_new_ticket
 
 # --- CONFIGURATION ---
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = 1417184246  # 👈 እዚህ ጋር ያንተን ID ተካው!
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
