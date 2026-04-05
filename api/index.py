@@ -11,8 +11,8 @@ except ImportError:
     from api.database import get_active_lotteries, supabase, save_new_ticket
 
 # --- CONFIGURATION ---
-TOKEN = "7893868461:AAH4Z9BFMztqmre7BwGn8501vcPo7Ai_Te4"
-ADMIN_ID = 7471102761  # ያንተ መለያ ቁጥር
+TOKEN = "7893868461:AAGRFs9oUfKhQNJP1Z_r9TBdYZhppZs_sog"
+ADMIN_ID = 1417184246 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
@@ -70,10 +70,9 @@ def show_lottery_types(uid, lang):
         msg = "🎰 ሊሳተፉበት የሚፈልጉትን የዕጣ አይነት ይምረጡ፦"
         bot.send_message(uid, msg, reply_markup=markup)
     except Exception as e:
-        bot.send_message(uid, "❌ መረጃዎችን ማግኘት አልተቻለም።")
+        bot.send_message(uid, f"❌ ስህተት ተፈጥሯል፦ {str(e)}")
 
 def send_payment_instructions(uid, lott_id):
-    """የክፍያ መመሪያ እና QR ኮድ መላኪያ"""
     msg = (
         "💳 **የክፍያ መመሪያ (Manual Payment)**\n\n"
         "1️⃣ ከታች ያለውን የ QR ኮድ በቴሌብር ስካን ያድርጉ።\n"
@@ -82,7 +81,6 @@ def send_payment_instructions(uid, lott_id):
         "⚠️ ትኬት የሚላከው ደረሰኝዎ በአድሚን ተረጋግጦ ሲፈቀድ ብቻ ነው።"
     )
     
-    # ፎቶውን ለመላክ መሞከር (በ api/my_qr.jpg መኖር አለበት)
     qr_path = os.path.join(os.path.dirname(__file__), 'my_qr.jpg')
     try:
         with open(qr_path, 'rb') as qr:
@@ -92,13 +90,11 @@ def send_payment_instructions(uid, lott_id):
 
 @bot.message_handler(content_types=['photo'])
 def handle_receipt_upload(message):
-    """ተጠቃሚው ደረሰኝ ሲልክ"""
     uid = message.chat.id
     user_name = message.from_user.first_name
     
     bot.send_message(uid, "⏳ ደረሰኝዎ ደርሶናል። አረጋግጠን ትኬትዎን እስክንልክ ድረስ ለጥቂት ደቂቃዎች ይጠብቁ።")
 
-    # ለአድሚኑ (ላንተ) ፎቶውን መላክ
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(
         telebot.types.InlineKeyboardButton("✅ ፍቀድ (Approve)", callback_data=f"approve_{uid}"),
@@ -114,7 +110,6 @@ def handle_receipt_upload(message):
     )
 
 def handle_admin_decision(call):
-    # ውሳኔውን የወሰነው አድሚን መሆኑን ማረጋገጥ
     if call.from_user.id != ADMIN_ID:
         bot.answer_callback_query(call.id, "Permission Denied!")
         return
@@ -125,19 +120,16 @@ def handle_admin_decision(call):
         ticket = generate_ticket_number()
         bot.send_message(target_uid, f"🎉 እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል።\n\n🎫 የሎተሪ ትኬት ቁጥርዎ፦ `{ticket}`\nመልካም ዕድል!")
         bot.edit_message_caption(f"✅ ለ {target_uid} ትኬት ተልኳል።", call.message.chat.id, call.message.message_id)
-        
-        # ዳታቤዝ ላይ ማስቀመጥ (እንደ ዳታቤዝህ አወቃቀር መስተካከል ይችላል)
-        # save_new_ticket(target_uid, ticket, ...)
     
     elif action == "reject":
         bot.send_message(target_uid, "❌ ይቅርታ፣ የላኩት ደረሰኝ ተቀባይነት አላገኘም። እባክዎ ትክክለኛውን ደረሰኝ መላክዎን ያረጋግጡ።")
         bot.edit_message_caption(f"🛑 የ {target_uid} ክፍያ ውድቅ ተደርጓል።", call.message.chat.id, call.message.message_id)
 
-# ይህንን ክፍል ፈልገህ ቀይረው
+# --- VERCEL ROUTE ---
 @app.route('/api/webhook', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'GET':
-        return "Bot is Active!", 200
+        return "Smart-X Bot is Active and Listening!", 200
         
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
@@ -145,4 +137,7 @@ def webhook():
         bot.process_new_updates([update])
         return ''
     return 'Forbidden', 403
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
     
