@@ -23,17 +23,28 @@ WEBHOOK_PATH = f"/bot/{TOKEN}"
 FINAL_WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
 # --- Keyboards (አዝራሮች) ---
-
-def get_main_menu():
+def get_main_menu(lang="am"):
     kb = ReplyKeyboardBuilder()
-    kb.button(text="➕ አዲስ ትኬት ቁረጥ")
-    kb.button(text="👤 የእኔ መረጃ")
-    kb.button(text="🎁 አሸናፊዎች")
-    kb.button(text="👥 ጓደኛ ጋብዝ")
-    kb.button(text="💡 እገዛ")
-    kb.button(text="🌐 ቋንቋ")
-    kb.adjust(1, 2, 2, 1) # ምስሉ ላይ ባለው አቀማመጥ መሰረት
+    
+    if lang == "en":
+        kb.button(text="➕ Buy New Ticket")
+        kb.button(text="👤 My Info")
+        kb.button(text="🎁 Winners")
+        kb.button(text="👥 Invite Friends")
+        kb.button(text="💡 Help")
+        kb.button(text="🌐 Language")
+    else:
+        kb.button(text="➕ አዲስ ትኬት ቁረጥ")
+        kb.button(text="👤 የእኔ መረጃ")
+        kb.button(text="🎁 አሸናፊዎች")
+        kb.button(text="👥 ጓደኛ ጋብዝ")
+        kb.button(text="💡 እገዛ")
+        kb.button(text="🌐 ቋንቋ")
+        
+    kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
+    
+
 
 def get_start_inline():
     builder = InlineKeyboardBuilder()
