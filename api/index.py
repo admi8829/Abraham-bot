@@ -153,6 +153,14 @@ async def handle_language_choice(callback: types.CallbackQuery):
 
         # 5. ዋናውን ሜኑ በአዲሱ ቋንቋ መላክ (ተጠቃሚው ወዲያው እንዲጠቀም)
         await callback.message.answer(menu_msg, reply_markup=get_main_menu())
+        # ... ከላይ ያለው የዳታቤዝ update እንደተጠበቀ ሆኖ ...
+
+# ዋናውን ሜኑ በአዲሱ ቋንቋ መላክ
+await callback.message.answer(
+    menu_msg, 
+    reply_markup=get_main_menu(selected_lang) # እዚህ ጋር selected_langን እናስተላልፋለን
+)
+
 
     except Exception as e:
         print(f"Error updating language: {e}")
