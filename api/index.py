@@ -43,48 +43,65 @@ def get_start_inline():
     return builder.as_markup()
 
 # --- Handlers (ትዕዛዞች) ---
-
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or "ተጠቃሚ"
 
-    # ተጠቃሚውን ዳታቤዝ ላይ መመዝገብ
+    # 1. ተጠቃሚው ቀድሞ ካለ ቋንቋውን ከዳታቤዝ ማምጣት
     try:
-        supabase.table("users").upsert({
-            "user_id": user_id, 
-            "username": username,
-            "lang": "am"
-        }).execute()
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        
+        if res.data:
+            # ተጠቃሚው ቀድሞ ካለ ያለውን ቋንቋ ተጠቀም
+            user_lang = res.data[0].get('lang', 'am')
+        else:
+            # አዲስ ተጠቃሚ ከሆነ መዝግብና በ 'am' ጀምር
+            user_lang = 'am'
+            supabase.table("users").insert({
+                "user_id": user_id, 
+                "username": username,
+                "lang": user_lang
+            }).execute()
+            
     except Exception as e:
         print(f"Database Error: {e}")
+        user_lang = 'am' # ስህተት ካለ በ default አማርኛ ይሁን
 
-    # GIF ID (እዚህ ጋር ያገኘኸውን ID ተካው)
-    # ማሳሰቢያ፡ ገና ID ካላገኘህ ለጊዜው ሊንኩን ተጠቀም
+    # 2. በቋንቋው መሰረት ጽሁፎችን መምረጥ
+    if user_lang == "en":
+        caption_text = (
+            f"Welcome {username} 👋\n\n"
+            "With this bot, you can get lottery tickets and win prizes.\n\n"
+            "Click 'Add New Ticket' to start."
+        )
+        menu_text = "Use the options below:"
+    else:
+        caption_text = (
+            f"እንኳን ደህና መጡ {username} 👋\n\n"
+            "በዚህ ቦት አማካኝነት የእጣ ቁጥር በመቁረጥ የሽልማት ባለቤት መሆን ይችላሉ።\n\n"
+            "ለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።"
+        )
+        menu_text = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
+
+    # 3. GIF መላክ (በሰጠኸው File ID መሰረት)
     gif_to_send = "BAACAgQAAxkBAAIDWWnUdyBug7o6VuYE0-LSiQE4_7ybAALfGwACtVqYUuzQrkNdaNKBOwQ"
     
-    caption_text = (
-        f"እንኳን ደህና መጡ {username} 👋\n\n"
-        "በዚህ ቦት አማካኝነት የእጣ ቁጥር በመቁረጥ የሽልማት ባለቤት መሆን ይችላሉ።\n\n"
-        "ለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።"
-    )
-
     try:
         await message.answer_animation(
             animation=gif_to_send,
             caption=caption_text,
             reply_markup=get_start_inline()
         )
-    except:
-        # GIF ካልሰራ በጽሁፍ ብቻ እንዲልክ
+    except Exception as e:
+        # GIF መላክ ካልተቻለ በጽሁፍ ብቻ
         await message.answer(caption_text, reply_markup=get_start_inline())
     
-    await message.answer("ከታች ያሉትን አማራጮች ይጠቀሙ፡", reply_markup=get_main_menu())
+    # 4. ዋናውን ሜኑ መላክ
+    await message.answer(menu_text, reply_markup=get_main_menu())
+    
 
-# GIF ID ለማግኘት የሚረዳ Handler (ለአንተ ብቻ)
-@dp.message(F.animation)
-async def get_gif_id_handler(message: types.Message):
-    await message.answer(f"የዚህ GIF File ID:\n`{message.animation.file_id}`", parse_mode="Markdown")
+
 
 # ለቋንቋ መቀየሪያ
 @dp.message(F.text == "🌐 ቋንቋ")
