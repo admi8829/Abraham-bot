@@ -53,6 +53,7 @@ def get_start_inline():
     builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
     return builder.as_markup()
 
+
 # --- Handlers (ትዕዛዞች) ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
@@ -77,7 +78,7 @@ async def start_handler(message: types.Message):
             
     except Exception as e:
         print(f"Database Error: {e}")
-        user_lang = 'am' # ስህተት ካለ በ default አማርኛ ይሁን
+        user_lang = 'am'
 
     # 2. በቋንቋው መሰረት ጽሁፎችን መምረጥ
     if user_lang == "en":
@@ -95,7 +96,7 @@ async def start_handler(message: types.Message):
         )
         menu_text = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
 
-    # 3. GIF መላክ (በሰጠኸው File ID መሰረት)
+    # 3. GIF መላክ
     gif_to_send = "CgACAgQAAxkBAAIBmWnVKif0xiwbmWxyUfBzGneJthwZAAKxGQACnsipUjQrEigho6qBOwQ"
     
     try:
@@ -105,14 +106,12 @@ async def start_handler(message: types.Message):
             reply_markup=get_start_inline()
         )
     except Exception as e:
-        # GIF መላክ ካልተቻለ በጽሁፍ ብቻ
         await message.answer(caption_text, reply_markup=get_start_inline())
     
-    # 4. ዋናውን ሜኑ መላክ
-    await message.answer(menu_text, reply_markup=get_main_menu())
+    # 4. ዋናውን ሜኑ መላክ (እዚህ ጋር ነው የተስተካከለው!)
+    # የ user_lang ተለዋዋጭን ለ get_main_menu ማስተላለፍ አለብህ
+    await message.answer(menu_text, reply_markup=get_main_menu(lang=user_lang))
     
-
-
 
 # ለቋንቋ መቀየሪያ
 @dp.message(F.text == "🌐 ቋንቋ" or F.text == "🌐 Language")
