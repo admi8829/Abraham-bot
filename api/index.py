@@ -64,7 +64,7 @@ async def start_handler(message: types.Message):
     try:
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         
-        if res.data:
+        if res.data and len(res.data) > 0:
             # ተጠቃሚው ቀድሞ ካለ ያለውን ቋንቋ ተጠቀም
             user_lang = res.data[0].get('lang', 'am')
         else:
@@ -78,14 +78,14 @@ async def start_handler(message: types.Message):
             
     except Exception as e:
         print(f"Database Error: {e}")
-        user_lang = 'am'
+        user_lang = 'am' # ስህተት ካለ በ default አማርኛ ይሁን
 
     # 2. በቋንቋው መሰረት ጽሁፎችን መምረጥ
     if user_lang == "en":
         caption_text = (
             f"Welcome {username} 👋\n\n"
             "With this bot, you can get lottery tickets and win prizes.\n\n"
-            "Click 'Add New Ticket' to start."
+            "Click 'Buy New Ticket' to start."
         )
         menu_text = "Use the options below:"
     else:
@@ -96,7 +96,7 @@ async def start_handler(message: types.Message):
         )
         menu_text = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
 
-    # 3. GIF መላክ
+    # 3. GIF መላክ (በሰጠኸው File ID መሰረት)
     gif_to_send = "CgACAgQAAxkBAAIBmWnVKif0xiwbmWxyUfBzGneJthwZAAKxGQACnsipUjQrEigho6qBOwQ"
     
     try:
@@ -106,13 +106,12 @@ async def start_handler(message: types.Message):
             reply_markup=get_start_inline()
         )
     except Exception as e:
+        # GIF መላክ ካልተቻለ በጽሁፍ ብቻ እንዲልክ
         await message.answer(caption_text, reply_markup=get_start_inline())
     
-    # 4. ዋናውን ሜኑ መላክ (እዚህ ጋር ነው የተስተካከለው!)
-    # የ user_lang ተለዋዋጭን ለ get_main_menu ማስተላለፍ አለብህ
+    # 4. ዋናውን ሜኑ መላክ (የተመረጠውን ቋንቋ ለ get_main_menu እናስተላልፋለን)
     await message.answer(menu_text, reply_markup=get_main_menu(lang=user_lang))
-    
-
+            
 # ለቋንቋ መቀየሪያ
 @dp.message(F.text == "🌐 ቋንቋ" or F.text == "🌐 Language")
 async def show_language_options(message: types.Message):
