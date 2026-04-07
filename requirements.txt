@@ -1,4 +1,4 @@
-aiogram
+aiogram==3.4.1
 supabase
 fastapi
 uvicorn
