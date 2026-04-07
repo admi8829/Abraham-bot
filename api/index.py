@@ -88,11 +88,18 @@ async def get_gif_id_handler(message: types.Message):
 
 # ለቋንቋ መቀየሪያ
 @dp.message(F.text == "🌐 ቋንቋ")
-async def language_menu(message: types.Message):
+async def show_language_options(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"))
-    builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
-    await message.answer("እባክዎ ቋንቋ ይምረጡ / Choose Language:", reply_markup=builder.as_markup())
+    # callback_data ተጠቃሚው ሲጫነው ወደ ቦቱ የሚላክ ድብቅ መረጃ ነው
+    builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_lang_am"))
+    builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_lang_en"))
+    
+    await message.answer(
+        "እባክዎ ቋንቋ ይምረጡ / Please choose a language:", 
+        reply_markup=builder.as_markup()
+    )
+    
+
 
 @dp.callback_query(F.data.startswith("set_"))
 async def set_lang_callback(callback: types.CallbackQuery):
