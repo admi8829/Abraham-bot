@@ -1,20 +1,26 @@
 import os
+import asyncio
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from supabase import create_client, Client
 
-# Configurations (ከ Vercel Environment Variables የሚነበቡ)
+# 1. Environment Variables (ከVercel የሚነበቡ)
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+BASE_URL = os.getenv("WEBHOOK_URL") 
 
+# 2. Initialization
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = FastAPI()
+
+# Webhook paths
+WEBHOOK_PATH = f"/bot/{TOKEN}"
+FINAL_WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
 # --- Keyboards (አዝራሮች) ---
 
@@ -26,7 +32,7 @@ def get_main_menu():
     kb.button(text="👥 ጓደኛ ጋብዝ")
     kb.button(text="💡 እገዛ")
     kb.button(text="🌐 ቋንቋ")
-    kb.adjust(1, 2, 2, 1) # አቀማመጡን በምስሉ መሰረት ያደርገዋል
+    kb.adjust(1, 2, 2, 1) # ምስሉ ላይ ባለው አቀማመጥ መሰረት
     return kb.as_markup(resize_keyboard=True)
 
 def get_start_inline():
@@ -39,52 +45,74 @@ def get_start_inline():
 # --- Handlers (ትዕዛዞች) ---
 
 @dp.message(Command("start"))
-async def start_command(message: types.Message):
+async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username or "User"
+    username = message.from_user.username or "ተጠቃሚ"
 
-    # 1. ተጠቃሚውን ዳታቤዝ ላይ መመዝገብ
+    # ተጠቃሚውን ዳታቤዝ ላይ መመዝገብ
     try:
         supabase.table("users").upsert({
             "user_id": user_id, 
             "username": username,
-            "lang": "am" # Default ቋንቋ አማርኛ
+            "lang": "am"
         }).execute()
     except Exception as e:
         print(f"Database Error: {e}")
 
-    # 2. GIF መላክ (እዚህ ጋር ያገኘኸውን File ID ተካው)
-    # ማሳሰቢያ፡ IDው ከሌለህ ለጊዜው በሊንኩ መጠቀም ትችላለህ
-    gif_to_send = "YOUR_GIF_FILE_ID_HERE" 
-    if gif_to_send == "YOUR_GIF_FILE_ID_HERE":
-        gif_to_send = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXN4bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o7TKMGpxxZES858DS/giphy.gif"
+    # GIF ID (እዚህ ጋር ያገኘኸውን ID ተካው)
+    # ማሳሰቢያ፡ ገና ID ካላገኘህ ለጊዜው ሊንኩን ተጠቀም
+    gif_to_send = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXN4bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3JmVwPXYxX2ludGVybmFsX2dpZl9ieV9iZCZjdD1n/3o7TKMGpxxZES858DS/giphy.gif"
     
-    caption = f"እንኳን ደህና መጡ {username} 👋\n\nበዚህ ቦት አማካኝነት የእጣ ቁጥር በመቁረጥ የሽልማት ባለቤት መሆን ይችላሉ።"
-    
-    await message.answer_animation(
-        animation=gif_to_send,
-        caption=caption,
-        reply_markup=get_start_inline()
+    caption_text = (
+        f"እንኳን ደህና መጡ {username} 👋\n\n"
+        "በዚህ ቦት አማካኝነት የእጣ ቁጥር በመቁረጥ የሽልማት ባለቤት መሆን ይችላሉ።\n\n"
+        "ለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።"
     )
+
+    try:
+        await message.answer_animation(
+            animation=gif_to_send,
+            caption=caption_text,
+            reply_markup=get_start_inline()
+        )
+    except:
+        # GIF ካልሰራ በጽሁፍ ብቻ እንዲልክ
+        await message.answer(caption_text, reply_markup=get_start_inline())
     
-    # 3. ዋናውን Reply Menu መላክ
     await message.answer("ከታች ያሉትን አማራጮች ይጠቀሙ፡", reply_markup=get_main_menu())
 
-# --- የ GIF ID ማግኛ Handler (ለአንተ ብቻ እንዲጠቅም) ---
+# GIF ID ለማግኘት የሚረዳ Handler (ለአንተ ብቻ)
 @dp.message(F.animation)
-async def handle_gif(message: types.Message):
-    gif_id = message.animation.file_id
-    await message.answer(f"የዚህ GIF File ID: \n`{gif_id}`", parse_mode="Markdown")
+async def get_gif_id_handler(message: types.Message):
+    await message.answer(f"የዚህ GIF File ID:\n`{message.animation.file_id}`", parse_mode="Markdown")
+
+# ለቋንቋ መቀየሪያ
+@dp.message(F.text == "🌐 ቋንቋ")
+async def language_menu(message: types.Message):
+    builder = InlineKeyboardBuilder()
+    builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"))
+    builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
+    await message.answer("እባክዎ ቋንቋ ይምረጡ / Choose Language:", reply_markup=builder.as_markup())
+
+@dp.callback_query(F.data.startswith("set_"))
+async def set_lang_callback(callback: types.CallbackQuery):
+    lang = callback.data.split("_")[1]
+    supabase.table("users").update({"lang": lang}).eq("user_id", callback.from_user.id).execute()
+    
+    text = "ቋንቋ ተቀይሯል!" if lang == "am" else "Language Updated!"
+    await callback.message.edit_text(text)
+    await callback.answer()
 
 # --- Webhook Endpoint ---
 
-@app.post("/")
-async def webhook(request: Request):
-    update = types.Update.model_validate(await request.json(), context={"bot": bot})
-    await dp.feed_update(bot, update)
-    return {"status": "ok"}
-
 @app.on_event("startup")
 async def on_startup():
-    await bot.set_webhook(url=WEBHOOK_URL)
+    await bot.set_webhook(url=FINAL_WEBHOOK_URL)
+
+@app.post(WEBHOOK_PATH)
+async def bot_webhook(request: Request):
+    update_data = await request.json()
+    update = types.Update.model_validate(update_data, context={"bot": bot})
+    await dp.feed_update(bot, update)
+    return {"status": "ok"}
     
