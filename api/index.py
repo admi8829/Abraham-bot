@@ -116,28 +116,37 @@ async def show_language_options(message: types.Message):
         reply_markup=builder.as_markup()
     )
     
-
-@dp.callback_query(F.data.startswith("set_lang_"))
+@dp.callback_query(F.data.startswith("set_"))
 async def handle_language_choice(callback: types.CallbackQuery):
-    # ከ callback_data ላይ 'am' ወይም 'en' የሚለውን መለየት
-    selected_lang = callback.data.replace("set_lang_", "")
+    # ከ callback_data ላይ 'am' ወይም 'en' የሚለውን መለየት (set_am -> am)
+    selected_lang = callback.data.split("_")[1]
     user_id = callback.from_user.id
     
-    # በ Supabase ውስጥ የተጠቃሚውን ቋንቋ ማዘመን
+    # 1. በ Supabase ውስጥ የተጠቃሚውን ቋንቋ ማዘመን
     try:
         supabase.table("users").update({"lang": selected_lang}).eq("user_id", user_id).execute()
         
-        # ለተጠቃሚው ማረጋገጫ መስጠት
-        confirm_msg = "ቋንቋ ወደ አማርኛ ተቀይሯል!" if selected_lang == "am" else "Language set to English!"
+        # 2. ለተጠቃሚው በመረጠው ቋንቋ ማረጋገጫ ማዘጋጀት
+        if selected_lang == "am":
+            confirm_msg = "✅ ቋንቋ ወደ አማርኛ ተቀይሯል!"
+            menu_msg = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
+        else:
+            confirm_msg = "✅ Language set to English!"
+            menu_msg = "Use the options below:"
+
+        # 3. የነበረውን የቋንቋ መምረጫ ጽሁፍ ማጥፋት ወይም ማስተካከል
         await callback.message.edit_text(confirm_msg)
         
-        # ቲክ ምልክት (Alert) እንዲያሳይ
+        # 4. ቲክ ምልክት (Alert) ከላይ እንዲያሳይ
         await callback.answer(confirm_msg)
+
+        # 5. ዋናውን ሜኑ በአዲሱ ቋንቋ መላክ (ተጠቃሚው ወዲያው እንዲጠቀም)
+        await callback.message.answer(menu_msg, reply_markup=get_main_menu())
+
     except Exception as e:
+        print(f"Error updating language: {e}")
         await callback.answer("ስህተት አጋጥሟል / Error occurred", show_alert=True)
-                                                                   
-
-
+        
 
 # --- Webhook Endpoint ---
 
