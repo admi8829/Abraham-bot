@@ -61,7 +61,7 @@ async def start_handler(message: types.Message):
 
     # GIF ID (እዚህ ጋር ያገኘኸውን ID ተካው)
     # ማሳሰቢያ፡ ገና ID ካላገኘህ ለጊዜው ሊንኩን ተጠቀም
-    gif_to_send = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXN4bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3bmZ3JmVwPXYxX2ludGVybmFsX2dpZl9ieV9iZCZjdD1n/3o7TKMGpxxZES858DS/giphy.gif"
+    gif_to_send = "BAACAgQAAxkBAAIDWWnUdyBug7o6VuYE0-LSiQE4_7ybAALfGwACtVqYUuzQrkNdaNKBOwQ"
     
     caption_text = (
         f"እንኳን ደህና መጡ {username} 👋\n\n"
