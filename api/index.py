@@ -113,17 +113,20 @@ async def start_handler(message: types.Message):
     await message.answer(menu_text, reply_markup=get_main_menu(lang=user_lang))
             
 # ለቋንቋ መቀየሪያ
-@dp.message(F.text == "🌐 ቋንቋ" or F.text == "🌐 Language")
+
+# ለቋንቋ መቀየሪያ (በሁለቱም ቋንቋ እንዲሰራ)
+@dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
 async def show_language_options(message: types.Message):
     builder = InlineKeyboardBuilder()
-    # callback_data ላይ set_am እና set_en ብቻ አድርገው
+    # callback_data በትክክል መዘጋጀቱን አረጋግጥ
     builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"))
     builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
     
     await message.answer(
         "እባክዎ ቋንቋ ይምረጡ / Please choose a language:", 
         reply_markup=builder.as_markup()
-)
+    )
+
 
 @dp.callback_query(F.data.startswith("set_"))
 async def handle_language_choice(callback: types.CallbackQuery):
