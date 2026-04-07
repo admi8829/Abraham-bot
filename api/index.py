@@ -96,7 +96,7 @@ async def start_handler(message: types.Message):
         menu_text = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
 
     # 3. GIF መላክ (በሰጠኸው File ID መሰረት)
-    gif_to_send = "BAACAgQAAxkBAAIDWWnUdyBug7o6VuYE0-LSiQE4_7ybAALfGwACtVqYUuzQrkNdaNKBOwQ"
+    gif_to_send = "CgACAgQAAxkBAAIBmWnVKif0xiwbmWxyUfBzGneJthwZAAKxGQACnsipUjQrEigho6qBOwQ"
     
     try:
         await message.answer_animation(
