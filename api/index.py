@@ -126,7 +126,7 @@ async def show_language_options(message: types.Message):
         "እባክዎ ቋንቋ ይምረጡ / Please choose a language:", 
         reply_markup=builder.as_markup()
     )
-    
+
 @dp.callback_query(F.data.startswith("set_"))
 async def handle_language_choice(callback: types.CallbackQuery):
     # 1. ቋንቋውን መለየት
@@ -160,7 +160,7 @@ async def handle_language_choice(callback: types.CallbackQuery):
     except Exception as e:
         print(f"Error updating language: {e}")
         await callback.answer("ስህተት አጋጥሟል / Error occurred", show_alert=True)
-
+    
 
 # --- Webhook Endpoint ---
 
