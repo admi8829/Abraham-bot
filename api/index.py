@@ -132,6 +132,30 @@ async def my_info_handler(message: types.Message):
     except Exception as e:
         print(f"Error in My Info: {e}")
         await message.answer("ስህተት ተከስቷል፣ እባክዎ ቆይተው ይሞክሩ።")
+
+@dp.message(F.text.in_({"🎁 አሸናፊዎች", "🎁 Winners"}))
+async def show_winners(message: types.Message):
+    try:
+        # በቅርብ ጊዜ ያሸነፉ 5 ሰዎችን ማምጣት
+        res = supabase.table("winners").select("ticket_number, draw_date, users(username)").order("draw_date", desc=True).limit(5).execute()
+        winners_list = res.data
+
+        if not winners_list:
+            text = "🏆 **አሸናፊዎች**\n\nእስካሁን ምንም አሸናፊ አልተመዘገበም። ቀጣዩ አሸናፊ እርስዎ ይሁኑ!"
+        else:
+            text = "🏆 **የቅርብ ጊዜ አሸናፊዎች**\n\n"
+            for w in winners_list:
+                name = w['users']['username'] if w['users']['username'] else "ተጠቃሚ"
+                # ቀኑን ለማሳመር (ከ timestamp ላይ ቀኑን ብቻ መውሰድ)
+                date = w['draw_date'].split('T')[0] if 'T' in w['draw_date'] else ""
+                text += f"⭐ @{name} — ቲኬት፦ `{w['ticket_number']}` ({date})\n"
+        
+        await message.answer(text)
+
+    except Exception as e:
+        print(f"Error fetching winners: {e}")
+        await message.answer("አሸናፊዎችን ማግኘት አልተቻለም።")
+        
                 
 
 # 3. አድሚኑ ሲያጸድቅ
