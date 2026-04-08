@@ -100,6 +100,39 @@ async def handle_screenshot(message: types.Message):
     
     await bot.send_photo(chat_id=int(ADMIN_ID), photo=photo_id, caption=f"ክፍያ ከ: {user_id}", reply_markup=kb.as_markup())
     await message.answer("ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ ቁጥር ይላክለታል።")
+    
+@dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
+async def my_info_handler(message: types.Message):
+    user_id = message.from_user.id
+    
+    try:
+        # 1. የቋንቋ ምርጫውን ማወቅ
+        res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+
+        # 2. የጸደቁ ቲኬቶችን ከዳታቤዝ ማምጣት
+        res_tickets = supabase.table("tickets").select("ticket_number").eq("user_id", user_id).eq("status", "approved").execute()
+        tickets = res_tickets.data
+
+        if lang == "am":
+            if not tickets:
+                text = "🛡 **የእርስዎ መረጃ**\n\nእስካሁን ምንም የቆረጡት ትኬት የለም።"
+            else:
+                ticket_list = "\n• ".join([t['ticket_number'] for t in tickets])
+                text = f"👤 **የእርስዎ መረጃ**\n\n🆔 ID: `{user_id}`\n🎫 **የቆረጧቸው ትኬቶች፦**\n• {ticket_list}"
+        else:
+            if not tickets:
+                text = "🛡 **Your Info**\n\nYou haven't purchased any tickets yet."
+            else:
+                ticket_list = "\n• ".join([t['ticket_number'] for t in tickets])
+                text = f"👤 **Your Info**\n\n🆔 ID: `{user_id}`\n🎫 **Your Tickets:**\n• {ticket_list}"
+
+        await message.answer(text, parse_mode="Markdown")
+
+    except Exception as e:
+        print(f"Error in My Info: {e}")
+        await message.answer("ስህተት ተከስቷል፣ እባክዎ ቆይተው ይሞክሩ።")
+                
 
 # 3. አድሚኑ ሲያጸድቅ
 @dp.callback_query(F.data.startswith("approve_"))
