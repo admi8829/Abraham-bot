@@ -194,6 +194,56 @@ async def handle_language_choice(callback: types.CallbackQuery):
     await callback.message.edit_text(msg)
     await callback.message.answer(msg, reply_markup=get_main_menu(lang))
 
+@dp.message(Command("broadcast"))
+async def broadcast_handler(message: types.Message):
+    # 1. አድሚን መሆንህን ያረጋግጣል
+    if str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    # መልእክቱን ለይቶ ማውጣት
+    broadcast_text = message.text.replace("/broadcast", "").strip()
+    
+    if not broadcast_text:
+        await message.answer("⚠️ እባክዎ የሚላከውን መልእክት ከትዕዛዙ ቀጥሎ ይጻፉ።\nምሳሌ፦ `/broadcast ነገ ዕጣ ይወጣል!`")
+        return
+
+    # 2. ሁሉንም ተጠቃሚዎች ከዳታቤዝ ማምጣት
+    try:
+        res = supabase.table("users").select("user_id").execute()
+        user_list = res.data
+    except Exception as e:
+        await message.answer(f"❌ ተጠቃሚዎችን ማግኘት አልተቻለም: {e}")
+        return
+
+    sent_count = 0
+    blocked_count = 0
+    
+    status_msg = await message.answer(f"⏳ ለ {len(user_list)} ተጠቃሚዎች መላክ ተጀምሯል...")
+
+    # 3. መላክ መጀመር
+    for user in user_list:
+        try:
+            await bot.send_message(user['user_id'], broadcast_text)
+            sent_count += 1
+            
+            # በየ 25 መልእክቱ 1 ሰከንድ እረፍት (Flood limit ለመከላከል)
+            if sent_count % 25 == 0:
+                await asyncio.sleep(1)
+                
+        except Exception as e:
+            # ተጠቃሚው ቦቱን Block ካደረገው እዚህ ይያዛል
+            blocked_count += 1
+            print(f"መላክ አልተቻለም ለ {user['user_id']}: {e}")
+
+    await status_msg.edit_text(
+        f"✅ **ብሮድካስት ተጠናቋል!**\n\n"
+        f"📤 የተላከላቸው፦ {sent_count}\n"
+        f"🚫 ቦቱን የዘጉ (Blocked)፦ {blocked_count}\n"
+        f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
+        )
+    
+
+
 @dp.message(Command("draw"))
 async def pick_winner(message: types.Message):
     # አድሚን መሆንህን ያረጋግጣል
