@@ -176,7 +176,6 @@ async def pick_winner(message: types.Message):
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    # ግሩፕ ላይ እንዲለቀቅ የቻናሉን ወይም የግሩፑን ID እዚህ ያስገቡ (ለምሳሌ፦ "@your_channel_username" ወይም -10012345678)
     GROUP_CHAT_ID = "-1003878868241" 
 
     try:
@@ -197,6 +196,20 @@ async def pick_winner(message: types.Message):
         user_res = supabase.table("users").select("username").eq("user_id", winner_user_id).execute()
         winner_name = user_res.data[0]['username'] if user_res.data else "ተጠቃሚ"
 
+        # --- አዲሱ ክፍል፡ ወደ Winners Table መመዝገብ እና የቲኬቱን Status መቀየር ---
+        try:
+            # ወደ winners table መመዝገብ
+            supabase.table("winners").insert({
+                "user_id": winner_user_id,
+                "ticket_number": winner_number
+            }).execute()
+            
+            # በ tickets table ውስጥ የቲኬቱን ሁኔታ ወደ 'winner' መቀየር
+            supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", winner_number).execute()
+        except Exception as db_err:
+            print(f"Database recording error: {db_err}")
+        # ------------------------------------------------------------
+
         # --- መልእክቶቹን ማዘጋጀት ---
         public_text = (
             "🎉 **እንኳን ደስ አላችሁ! የዛሬው አሸናፊ ተለይቷል!** 🎉\n\n"
@@ -208,7 +221,7 @@ async def pick_winner(message: types.Message):
         private_text = (
             "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
             f"በቆረጡት የሎተሪ ቲኬት ቁጥር **{winner_number}** አሸናፊ ሆነዋል። "
-            "እባክዎ ሽልማትዎን ለመቀበል @your_admin_username ላይ ያነጋግሩን።"
+            "እባክዎ ሽልማትዎን ለመቀበል አስተዳዳሪውን ያነጋግሩ።"
         )
 
         # 4. ለአሸናፊው በግል (Inbox) መላክ
@@ -224,7 +237,7 @@ async def pick_winner(message: types.Message):
             print(f"ወደ ግሩፕ መላክ አልተቻለም: {e}")
 
         # 6. ለአድሚኑ ማረጋገጫ መስጠት
-        await message.answer(f"✅ አሸናፊው ተለይቷል፦ @{winner_name}\nመልእክቶች በግልና በግሩፕ ተልከዋል።")
+        await message.answer(f"✅ አሸናፊው ተለይቷል፦ @{winner_name}\nመረጃው በዳታቤዝ ተመዝግቧል።")
 
     except Exception as e:
         print(f"Error: {e}")
