@@ -4,7 +4,7 @@ import random
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from supabase import create_client, Client
 
 # 1. Environment Variables
@@ -71,6 +71,7 @@ async def start_handler(message: types.Message):
     except: await message.answer(caption, reply_markup=get_start_inline())
     
     await message.answer("ምርጫዎን ይምረጡ / Choose option:", reply_markup=get_main_menu(user_lang))
+    
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message):
     res = supabase.table("users").select("lang").eq("user_id", message.from_user.id).execute()
