@@ -136,14 +136,18 @@ async def handle_language_choice(callback: types.CallbackQuery):
     msg = "✅ ቋንቋ ተቀይሯል!" if lang == "am" else "✅ Language Updated!"
     await callback.message.edit_text(msg)
     await callback.message.answer(msg, reply_markup=get_main_menu(lang))
+
 @dp.message(Command("draw"))
 async def pick_winner(message: types.Message):
     # አድሚን መሆንህን ያረጋግጣል
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
+    # ግሩፕ ላይ እንዲለቀቅ የቻናሉን ወይም የግሩፑን ID እዚህ ያስገቡ (ለምሳሌ፦ "@your_channel_username" ወይም -10012345678)
+    GROUP_CHAT_ID = "100387970844" 
+
     try:
-        # 1. ክፍያቸው የተረጋገጠ (approved) ቲኬቶችን ከዳታቤዝ ማምጣት
+        # 1. ክፍያቸው የተረጋገጠ ቲኬቶችን ማምጣት
         res = supabase.table("tickets").select("*").eq("status", "approved").execute()
         tickets = res.data
 
@@ -151,32 +155,48 @@ async def pick_winner(message: types.Message):
             await message.answer("ምንም የተሸጠ ቲኬት የለም።")
             return
 
-        # 2. በዕድል (Random) አንዱን ቲኬት መምረጥ
+        # 2. አሸናፊውን በዕድል መምረጥ
         winner_ticket = random.choice(tickets)
         winner_user_id = winner_ticket['user_id']
         winner_number = winner_ticket['ticket_number']
 
-        # 3. የአሸናፊውን መረጃ ማግኘት
+        # 3. የአሸናፊውን ስም ማግኘት
         user_res = supabase.table("users").select("username").eq("user_id", winner_user_id).execute()
         winner_name = user_res.data[0]['username'] if user_res.data else "ተጠቃሚ"
 
-        # 4. ውጤቱን ለአድሚኑ ማሳወቅ
-        result_text = (
-            "🎊 **አሸናፊው ተለይቷል!** 🎊\n\n"
-            f"👤 ስም፦ @{winner_name}\n"
-            f"🎫 የቲኬት ቁጥር፦ {winner_number}\n"
-            f"🆔 User ID: {winner_user_id}"
+        # --- መልእክቶቹን ማዘጋጀት ---
+        public_text = (
+            "🎉 **እንኳን ደስ አላችሁ! የዛሬው አሸናፊ ተለይቷል!** 🎉\n\n"
+            f"👤 አሸናፊ፦ @{winner_name}\n"
+            f"🎫 የቲኬት ቁጥር፦ {winner_number}\n\n"
+            "ቀጣዩ አሸናፊ እርስዎ ይሁኑ! አሁኑኑ ትኬት ይቁረጡ።"
         )
-        await message.answer(result_text)
+        
+        private_text = (
+            "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
+            f"በቆረጡት የሎተሪ ቲኬት ቁጥር **{winner_number}** አሸናፊ ሆነዋል። "
+            "እባክዎ ሽልማትዎን ለመቀበል @your_admin_username ላይ ያነጋግሩን።"
+        )
 
-        # 5. ለሁሉም ተጠቃሚዎች ማሳወቅ (አማራጭ)
-        # እዚህ ጋር ለሁሉም ተጠቃሚዎች ሜሴጅ መላክ ትችላለህ ወይም ቻናል ላይ መለጠፍ ትችላለህ
+        # 4. ለአሸናፊው በግል (Inbox) መላክ
+        try:
+            await bot.send_message(winner_user_id, private_text)
+        except Exception as e:
+            print(f"ለአሸናፊው መላክ አልተቻለም: {e}")
+
+        # 5. ወደ ቴሌግራም ግሩፕ/ቻናል መላክ
+        try:
+            await bot.send_message(GROUP_CHAT_ID, public_text)
+        except Exception as e:
+            print(f"ወደ ግሩፕ መላክ አልተቻለም: {e}")
+
+        # 6. ለአድሚኑ ማረጋገጫ መስጠት
+        await message.answer(f"✅ አሸናፊው ተለይቷል፦ @{winner_name}\nመልእክቶች በግልና በግሩፕ ተልከዋል።")
 
     except Exception as e:
-        print(f"Error picking winner: {e}")
-        await message.answer("አሸናፊውን ለመለየት ስህተት ተከስቷል።")
+        print(f"Error: {e}")
+        await message.answer("ስህተት ተከስቷል።")
     
-
 # --- Webhook ---
 @app.on_event("startup")
 async def on_startup():
