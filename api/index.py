@@ -135,7 +135,7 @@ async def show_language_options(message: types.Message):
         reply_markup=builder.as_markup()
     )
     
- @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
+@dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def handle_buy_ticket(message: types.Message):
     user_id = message.from_user.id
     
