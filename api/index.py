@@ -6,7 +6,7 @@ from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from supabase import create_client, Client
 
-# 1. Environment Variables (ከVercel የሚነበቡ)
+# 1. Environment Variables
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -18,91 +18,67 @@ dp = Dispatcher()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = FastAPI()
 
-# Webhook paths
 WEBHOOK_PATH = f"/bot/{TOKEN}"
 FINAL_WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
 # --- Keyboards (አዝራሮች) ---
+
 def get_main_menu(lang="am"):
     kb = ReplyKeyboardBuilder()
-    
     if lang == "en":
-        kb.button(text="➕ Buy New Ticket")
-        kb.button(text="👤 My Info")
-        kb.button(text="🎁 Winners")
-        kb.button(text="👥 Invite Friends")
-        kb.button(text="💡 Help")
-        kb.button(text="🌐 Language")
+        buttons = ["➕ Buy New Ticket", "👤 My Info", "🎁 Winners", "👥 Invite Friends", "💡 Help", "🌐 Language"]
     else:
-        kb.button(text="➕ አዲስ ትኬት ቁረጥ")
-        kb.button(text="👤 የእኔ መረጃ")
-        kb.button(text="🎁 አሸናፊዎች")
-        kb.button(text="👥 ጓደኛ ጋብዝ")
-        kb.button(text="💡 እገዛ")
-        kb.button(text="🌐 ቋንቋ")
-        
+        buttons = ["➕ አዲስ ትኬት ቁረጥ", "👤 የእኔ መረጃ", "🎁 አሸናፊዎች", "👥 ጓደኛ ጋብዝ", "💡 እገዛ", "🌐 ቋንቋ"]
+    
+    for btn in buttons:
+        kb.button(text=btn)
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
-    
-
 
 def get_start_inline():
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🌐 Website", url="https://yourwebsite.com"))
-    builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
-    builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
+    builder.add(types.InlineKeyboardButton(text="Channel", url="https://t.me/your_channel"))
     return builder.as_markup()
-
 
 def get_phone_keyboard(lang="am"):
     kb = ReplyKeyboardBuilder()
-    # እንደ ቋንቋው ምርጫ የጽሁፍ መልዕክቱን ይቀይራል
     text = "📱 ስልክ ቁጥርህን ላክ" if lang == "am" else "📱 Send Phone Number"
-    kb.row(types.KeyboardButton(text=text, request_contact=True)) # ስልክ ለመጠየቅ ወሳኙ መስመር
+    kb.row(types.KeyboardButton(text=text, request_contact=True))
     return kb.as_markup(resize_keyboard=True)
-    
 
-# --- Handlers (ትዕዛዞች) ---
 # --- Handlers (ትዕዛዞች) ---
 
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username or "ተጠቃሚ"
+    username = message.from_user.username or "User"
     
     try:
-        # 1. ቋንቋውን ከዳታቤዝ ማምጣት
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        
         if res.data and len(res.data) > 0:
             user_lang = res.data[0].get('lang', 'am')
         else:
             user_lang = 'am'
             supabase.table("users").insert({"user_id": user_id, "username": username, "lang": user_lang}).execute()
-            
-    except Exception as e:
-        print(f"DB Error: {e}")
+    except:
         user_lang = 'am'
 
-    # 2. መልዕክቱን ማዘጋጀት
     if user_lang == "en":
-        caption = f"Welcome {username} 👋\n\nClick 'Buy New Ticket' to start."
+        caption = f"Welcome {username}! Click 'Buy New Ticket' to start."
         menu_msg = "Use the options below:"
     else:
-        caption = f"እንኳን ደህና መጡ {username} 👋\n\nለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።"
+        caption = f"እንኳን ደህና መጡ {username}! ለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።"
         menu_msg = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
 
     gif_id = "CgACAgQAAxkBAAIBmWnVKif0xiwbmWxyUfBzGneJthwZAAKxGQACnsipUjQrEigho6qBOwQ"
-    
     try:
-        await message.answer_animation(animation=gif_id, caption=caption)
+        await message.answer_animation(animation=gif_id, caption=caption, reply_markup=get_start_inline())
     except:
-        await message.answer(caption)
+        await message.answer(caption, reply_markup=get_start_inline())
     
-    # 3. ዋናውን ሜኑ መላክ (ቋንቋውን እዚህ ጋር ማስተላለፍ ወሳኝ ነው!)
     await message.answer(menu_msg, reply_markup=get_main_menu(lang=user_lang))
 
-# ቋንቋ መክፈቻ - ሁለቱንም ቋንቋ እንዲሰማ ተስተካክሏል
+# ቋንቋ መክፈቻ (ለአማርኛም ለእንግሊዝኛም እንዲሰራ)
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
 async def show_language_options(message: types.Message):
     builder = InlineKeyboardBuilder()
@@ -110,26 +86,36 @@ async def show_language_options(message: types.Message):
     builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
     await message.answer("እባክዎ ቋንቋ ይምረጡ / Please choose a language:", reply_markup=builder.as_markup())
 
-# አዲስ ትኬት ቁረጥ - Indentation ተስተካክሏል
+@dp.callback_query(F.data.startswith("set_"))
+async def handle_language_choice(callback: types.CallbackQuery):
+    selected_lang = callback.data.split("_")[1]
+    user_id = callback.from_user.id
+    try:
+        supabase.table("users").update({"lang": selected_lang}).eq("user_id", user_id).execute()
+        msg = "✅ ቋንቋ ተቀይሯል!" if selected_lang == "am" else "✅ Language updated!"
+        await callback.message.edit_text(msg)
+        await callback.message.answer(msg, reply_markup=get_main_menu(lang=selected_lang))
+    except:
+        await callback.answer("Error!")
+
+# ትኬት መቁረጥ
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def handle_buy_ticket(message: types.Message):
     user_id = message.from_user.id
-    
     res = supabase.table("users").select("phone", "lang").eq("user_id", user_id).execute()
     user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
     lang = user_data.get("lang", "am")
     
     if not user_data.get("phone"):
-        msg = "ትኬት ለመግዛት መጀመሪያ ስልክ ቁጥርዎን ያጋሩ።" if lang == "am" else "Share your phone first to buy a ticket."
+        msg = "ትኬት ለመግዛት መጀመሪያ ስልክዎን ያጋሩ።" if lang == "am" else "Share your phone first to buy a ticket."
         await message.answer(msg, reply_markup=get_phone_keyboard(lang))
         return
 
-    # የሽልማት ዝርዝር
     if lang == "am":
-        prize_msg = "🏆 የሽልማት ዝርዝር፦\n1ኛ እጣ: 100,000 ብር\n\n💵 ዋጋ: 50 ብር\nለመቀጠል 'ክፈል' ይበሉ።"
+        prize_msg = "🏆 የሽልማት ዝርዝር፡\n1ኛ እጣ: 100,000 ብር\n\n💵 ዋጋ: 50 ብር"
         pay_btn = "💳 ክፈል"
     else:
-        prize_msg = "🏆 Prize List:\n1st Prize: 100,000 ETB\n\n💵 Price: 50 ETB\nClick 'Pay' to continue."
+        prize_msg = "🏆 Prize List:\n1st: 100,000 ETB\n\n💵 Price: 50 ETB"
         pay_btn = "💳 Pay"
 
     pay_builder = InlineKeyboardBuilder()
@@ -140,72 +126,13 @@ async def handle_buy_ticket(message: types.Message):
 async def handle_contact(message: types.Message):
     user_id = message.from_user.id
     phone = message.contact.phone_number
-    
     supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
     
     res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
     lang = res.data[0].get("lang", "am") if res.data else "am"
-    
-    msg = "✅ ስልክዎ ተመዝግቧል! አሁን ትኬት መቁረጥ ይችላሉ።" if lang == "am" else "✅ Phone registered! You can now buy a ticket."
-    await message.answer(msg, reply_markup=get_main_menu(lang))
-                                 
+    await message.answer("✅ ተመዝግቧል!", reply_markup=get_main_menu(lang))
 
-# --- የተቀሩት የ Callback እና Webhook ክፍሎች ይቀጥላሉ ---
-@dp.callback_query(F.data.startswith("set_"))
-async def handle_language_choice(callback: types.CallbackQuery):
-    # 'set_am' ከሆነ am ን ይወስዳል፣ 'set_en' ከሆነ en ን ይወስዳል
-    selected_lang = callback.data.split("_")[1] 
-    user_id = callback.from_user.id
-    
-    try:
-        # በ Supabase ውስጥ ማዘመን
-        supabase.table("users").update({"lang": selected_lang}).eq("user_id", user_id).execute()
-        
-        if selected_lang == "am":
-            confirm_msg = "✅ ቋንቋ ወደ አማርኛ ተቀይሯል!"
-            menu_msg = "ከታች ያሉትን አማራጮች ይጠቀሙ፡"
-        else:
-            confirm_msg = "✅ Language set to English!"
-            menu_msg = "Use the options below:"
-
-        await callback.message.edit_text(confirm_msg)
-        await callback.answer(confirm_msg)
-
-        # አዲሱን በተን (Reply Keyboard) መላክ
-        await callback.message.answer(
-            menu_msg, 
-            reply_markup=get_main_menu(selected_lang) 
-        )
-
-    except Exception as e:
-        print(f"Error: {e}")
-        await callback.answer("Error occurred", show_alert=True)
-
-@dp.message(F.contact)
-async def handle_contact(message: types.Message):
-    user_id = message.from_user.id
-    phone = message.contact.phone_number # የተላከው ስልክ ቁጥር
-    
-    try:
-        # 1. ስልኩን ዳታቤዝ ላይ ማዘመን
-        supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
-        
-        # 2. ቋንቋውን ማግኘት
-        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        lang = res.data[0].get("lang", "am") if res.data else "am"
-        
-        # 3. ስልኩ መመዝገቡን አረጋግጦ ወደ ዋናው ሜኑ መመለስ
-        success_msg = "✅ ስልክዎ ተመዝግቧል! አሁን 'አዲስ ትኬት ቁረጥ' የሚለውን በመጫን መቀጠል ይችላሉ።" if lang == "am" else "✅ Phone registered! Now click 'Buy New Ticket' to continue."
-        
-        await message.answer(success_msg, reply_markup=get_main_menu(lang))
-        
-    except Exception as e:
-        print(f"Error saving phone: {e}")
-        await message.answer("ስህተት አጋጥሟል፣ እባክዎ ደግመው ይሞክሩ።")
-        
-        
-# --- Webhook Endpoint ---
-
+# --- Webhook Setup ---
 @app.on_event("startup")
 async def on_startup():
     await bot.set_webhook(url=FINAL_WEBHOOK_URL)
