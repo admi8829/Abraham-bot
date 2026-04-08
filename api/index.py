@@ -155,7 +155,52 @@ async def handle_screenshot(message: types.Message):
         await message.answer("ስህተት ተከስቷል፣ እባክዎ ድጋሚ ይሞክሩ።")
 
 # ... ከዚህ በታች ቀጣዩ የ approve_payment handler ይገባል
+# ... (የቋንቋ መቀየሪያ ኮድ)
 
+# 1. መጀመሪያ የፎቶ መቀበያው ይግባ
+@dp.message(F.photo)
+async def handle_screenshot(message: types.Message):
+    # ... (ቅድም የጻፍነው የፎቶ መቀበያ ኮድ)
+
+# 2. ከእሱ በታች ይህ የማጽደቂያ ኮድ ይግባ
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_payment(callback: types.CallbackQuery):
+    target_user_id = int(callback.data.split("_")[1])
+    
+    # የሎተሪ ቁጥር መፍጠር
+    lottery_number = f"LOT-{random.randint(10000, 99999)}"
+    
+    try:
+        # በዳታቤዝ ውስጥ መመዝገብ
+        supabase.table("tickets").insert({
+            "user_id": target_user_id,
+            "ticket_number": lottery_number,
+            "status": "approved"
+        }).execute()
+
+        # ለተጠቃሚው የምስራች መላክ
+        await bot.send_message(
+            target_user_id,
+            f"🎉 እንኳን ደስ አለዎት! ክፍያዎ ተረጋግጧል።\nየእርስዎ የሎተሪ ቁጥር፦ **{lottery_number}**"
+        )
+        
+        await callback.answer("ትኬቱ ተልኳል!")
+        # የአድሚኑ ጋር ያለውን መልእክት ምልክት ማድረግ (ለማስታወስ እንዲረዳ)
+        await callback.message.edit_caption(caption=f"✅ ተረጋግጧል!\nቁጥር፦ {lottery_number}\nለተጠቃሚው ተልኳል።")
+        
+    except Exception as e:
+        print(f"Error in approval: {e}")
+        await callback.answer("ስህተት ተከስቷል! ደጋግመው ይሞክሩ።", show_alert=True)
+
+# 3. (አማራጭ) የውድቅ ማድረጊያ (Reject) ኮድ እዚህ መጨመር ትችላለህ
+@dp.callback_query(F.data.startswith("reject_"))
+async def reject_payment(callback: types.CallbackQuery):
+    target_user_id = int(callback.data.split("_")[1])
+    await bot.send_message(target_user_id, "❌ ይቅርታ፣ የላኩት የክፍያ ማረጋገጫ ተቀባይነት አላገኘም። እባክዎ በትክክል መላክዎን ያረጋግጡ።")
+    await callback.message.edit_caption(caption="❌ ክፍያው ውድቅ ተደርጓል።")
+    await callback.answer("ውድቅ ተደርጓል")
+
+# ... ከዚህ በኋላ Webhook endpoint ይከተላል
 
 # ለቋንቋ መቀየሪያ (በሁለቱም ቋንቋ እንዲሰራ)
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
