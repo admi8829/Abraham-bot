@@ -195,52 +195,84 @@ async def handle_language_choice(callback: types.CallbackQuery):
     await callback.message.answer(msg, reply_markup=get_main_menu(lang))
 
 @dp.message(Command("broadcast"))
-async def broadcast_handler(message: types.Message):
+async def enhanced_broadcast(message: types.Message):
     # 1. አድሚን መሆንህን ያረጋግጣል
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    # መልእክቱን ለይቶ ማውጣት
-    broadcast_text = message.text.replace("/broadcast", "").strip()
+    # መመሪያ ለአድሚኑ፡ ፎቶ ከሆነ ከፎቶው ስር ጽሁፍ ይጻፋል፣ ጽሁፍ ብቻ ከሆነ ደግሞ በኮማንድ ይላካል
+    # አጠቃቀም፡ /broadcast ጽሁፍ | ሊንክ_ስም | ሊንክ_URL
     
-    if not broadcast_text:
-        await message.answer("⚠️ እባክዎ የሚላከውን መልእክት ከትዕዛዙ ቀጥሎ ይጻፉ።\nምሳሌ፦ `/broadcast ነገ ዕጣ ይወጣል!`")
+    content = message.caption if message.photo else message.text.replace("/broadcast", "").strip()
+    
+    if not content:
+        await message.answer(
+            "⚠️ **እንዴት እንደሚጠቀሙ፦**\n\n"
+            "**ለጽሁፍ ብቻ፦** `/broadcast መልእክት | ሊንክ ስም | https://link.com` \n"
+            "**ለፎቶ፦** ፎቶውን ይላኩና ከስሩ መልእክቱን በተመሳሳይ ቅርጽ ይጻፉ።",
+            parse_mode="Markdown"
+        )
         return
 
-    # 2. ሁሉንም ተጠቃሚዎች ከዳታቤዝ ማምጣት
+    # መልእክቱን፣ የሊንክ ስሙን እና URLውን መለየት (| ምልክትን በመጠቀም)
+    parts = content.split("|")
+    msg_text = parts[0].strip()
+    btn_text = parts[1].strip() if len(parts) > 1 else None
+    btn_url = parts[2].strip() if len(parts) > 2 else None
+
+    # አዝራር (Button) ካለ ማዘጋጀት
+    kb = None
+    if btn_text and btn_url:
+        builder = InlineKeyboardBuilder()
+        builder.row(types.InlineKeyboardButton(text=btn_text, url=btn_url))
+        kb = builder.as_markup()
+
+    # 2. ሁሉንም ተጠቃሚዎች ማምጣት
     try:
         res = supabase.table("users").select("user_id").execute()
         user_list = res.data
     except Exception as e:
-        await message.answer(f"❌ ተጠቃሚዎችን ማግኘት አልተቻለም: {e}")
+        await message.answer(f"❌ ስህተት፦ {e}")
         return
 
     sent_count = 0
     blocked_count = 0
-    
-    status_msg = await message.answer(f"⏳ ለ {len(user_list)} ተጠቃሚዎች መላክ ተጀምሯል...")
+    status_msg = await message.answer(f"⏳ ለ {len(user_list)} ሰዎች መላክ ተጀምሯል...")
 
     # 3. መላክ መጀመር
     for user in user_list:
         try:
-            await bot.send_message(user['user_id'], broadcast_text)
-            sent_count += 1
+            if message.photo:
+                # ፎቶ ካለ በፎቶ ይልካል
+                await bot.send_photo(
+                    chat_id=user['user_id'],
+                    photo=message.photo[-1].file_id,
+                    caption=msg_text,
+                    reply_markup=kb,
+                    parse_mode="Markdown"
+                )
+            else:
+                # ጽሁፍ ብቻ ከሆነ
+                await bot.send_message(
+                    chat_id=user['user_id'],
+                    text=msg_text,
+                    reply_markup=kb,
+                    parse_mode="Markdown"
+                )
             
-            # በየ 25 መልእክቱ 1 ሰከንድ እረፍት (Flood limit ለመከላከል)
+            sent_count += 1
             if sent_count % 25 == 0:
-                await asyncio.sleep(1)
-                
-        except Exception as e:
-            # ተጠቃሚው ቦቱን Block ካደረገው እዚህ ይያዛል
+                await asyncio.sleep(1) # ፍጥነት መገደቢያ
+
+        except Exception:
             blocked_count += 1
-            print(f"መላክ አልተቻለም ለ {user['user_id']}: {e}")
 
     await status_msg.edit_text(
         f"✅ **ብሮድካስት ተጠናቋል!**\n\n"
         f"📤 የተላከላቸው፦ {sent_count}\n"
-        f"🚫 ቦቱን የዘጉ (Blocked)፦ {blocked_count}\n"
+        f"🚫 የዘጉ (Blocked)፦ {blocked_count}\n"
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
-        )
+    )
     
 
 
