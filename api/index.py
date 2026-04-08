@@ -86,20 +86,41 @@ async def buy_ticket_info(message: types.Message):
 
 # 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
 @dp.message(F.photo)
-async def handle_screenshot(message: types.Message):
-    if not ADMIN_ID: return await message.answer("Admin ID not set.")
-    
-    photo_id = message.photo[-1].file_id
+async def handle_photos(message: types.Message):
     user_id = message.from_user.id
     
-    supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
-    
-    kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Approve", callback_data=f"approve_{user_id}")
-    kb.button(text="❌ Reject", callback_data=f"reject_{user_id}")
-    
-    await bot.send_photo(chat_id=int(ADMIN_ID), photo=photo_id, caption=f"ክፍያ ከ: {user_id}", reply_markup=kb.as_markup())
-    await message.answer("ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ ቁጥር ይላክለታል።")
+    # --- ሀ. ፎቶው የብሮድካስት ከሆነ (ከአድሚን የመጣና /broadcast የሚል ጽሁፍ ካለው) ---
+    if str(user_id) == str(ADMIN_ID) and message.caption and message.caption.startswith("/broadcast"):
+        # የብሮድካስት ኮድህን እዚህ ጋር አስገባ
+        content = message.caption.replace("/broadcast", "").strip()
+        
+        # (እዚህ ጋር ቅድም የሰጠሁህ የብሮድካስት መላኪያ ሉፕ ይገባል...)
+        await message.answer("የፎቶ ብሮድካስት ተጀምሯል...")
+        # ... መላኪያ ኮድ ...
+        return # ብሮድካስት ከሆነ እዚህ ጋር ይቁም፣ ወደ ደረሰኝ መቀበያው አይለፍ
+
+    # --- ለ. ፎቶው የደረሰኝ ስክሪንሻት ከሆነ (ከተራ ተጠቃሚ የመጣ) ---
+    else:
+        # ይህ የድሮው የ handle_screenshot ኮድህ ነው
+        photo_id = message.photo[-1].file_id
+        username = message.from_user.username or "N/A"
+
+        # ለዳታቤዝ መመዝገብ
+        supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
+
+        # ለአድሚን (ለአንተ) መላክ
+        admin_kb = InlineKeyboardBuilder()
+        admin_kb.button(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}")
+        admin_kb.button(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}")
+        
+        await bot.send_photo(
+            chat_id=int(ADMIN_ID),
+            photo=photo_id,
+            caption=f"አዲስ የክፍያ ጥያቄ ከ፦ @{username}\nUser ID: {user_id}",
+            reply_markup=admin_kb.as_markup()
+        )
+        await message.answer("ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክለታል።")
+        
     
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
 async def my_info_handler(message: types.Message):
