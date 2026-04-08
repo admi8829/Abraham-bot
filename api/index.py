@@ -113,8 +113,49 @@ async def start_handler(message: types.Message):
     
     # 4. ዋናውን ሜኑ መላክ (የተመረጠውን ቋንቋ ለ get_main_menu እናስተላልፋለን)
     await message.answer(menu_text, reply_markup=get_main_menu(lang=user_lang))
-            
-# ለቋንቋ መቀየሪያ
+
+# ... ከዚህ በፊት የነበሩት handlers እንዳሉ ይቆያሉ
+
+# --- የፎቶ መቀበያ Handler ---
+@dp.message(F.photo)
+async def handle_screenshot(message: types.Message):
+    # ADMIN_ID መኖሩን ማረጋገጥ
+    if not ADMIN_ID:
+        await message.answer("Admin is not configured. Please contact support.")
+        return
+
+    photo_id = message.photo[-1].file_id
+    user_id = message.from_user.id
+    username = message.from_user.username or "N/A"
+
+    try:
+        # 1. መረጃውን በዳታቤዝ መመዝገብ
+        supabase.table("payments").insert({
+            "user_id": user_id,
+            "file_id": photo_id
+        }).execute()
+
+        # 2. ለአስተዳዳሪው (Admin) መላክ
+        admin_kb = InlineKeyboardBuilder()
+        admin_kb.button(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}")
+        admin_kb.button(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}")
+        
+        # ማሳሰቢያ፡ ADMIN_ID በ Vercel ላይ በቁጥር መቀመጥ አለበት
+        await bot.send_photo(
+            chat_id=int(ADMIN_ID), 
+            photo=photo_id,
+            caption=f"አዲስ የክፍያ ጥያቄ ከ፦ @{username}\nUser ID: {user_id}",
+            reply_markup=admin_kb.as_markup()
+        )
+        
+        await message.answer("ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክለታል።")
+        
+    except Exception as e:
+        print(f"Error handling photo: {e}")
+        await message.answer("ስህተት ተከስቷል፣ እባክዎ ድጋሚ ይሞክሩ።")
+
+# ... ከዚህ በታች ቀጣዩ የ approve_payment handler ይገባል
+
 
 # ለቋንቋ መቀየሪያ (በሁለቱም ቋንቋ እንዲሰራ)
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
@@ -159,7 +200,22 @@ async def handle_language_choice(callback: types.CallbackQuery):
     except Exception as e:
         print(f"Error: {e}")
         await callback.answer("Error occurred", show_alert=True)
-        
+    # ... ከላይ የነበረው handle_language_choice ኮድ እዚህ ያበቃል
+
+# --- እዚህ ጋር አዲሶቹን መቁረጫዎች ጀምር ---
+
+@dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
+async def buy_ticket_info(message: types.Message):
+    # (የሰጠሁህ ኮድ እዚህ ይገባል...)
+
+@dp.message(F.photo)
+async def handle_screenshot(message: types.Message):
+    # (የፎቶ መቀበያው ኮድ እዚህ ይገባል...)
+
+@dp.callback_query(F.data.startswith("approve_"))
+async def approve_payment(callback: types.CallbackQuery):
+    # (የማጽደቂያው ኮድ እዚህ ይገባል...)  
+    
 # --- Webhook Endpoint ---
 
 @app.on_event("startup")
