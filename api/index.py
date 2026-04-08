@@ -144,7 +144,7 @@ async def pick_winner(message: types.Message):
         return
 
     # ግሩፕ ላይ እንዲለቀቅ የቻናሉን ወይም የግሩፑን ID እዚህ ያስገቡ (ለምሳሌ፦ "@your_channel_username" ወይም -10012345678)
-    GROUP_CHAT_ID = "100387970844" 
+    GROUP_CHAT_ID = "-100387970844" 
 
     try:
         # 1. ክፍያቸው የተረጋገጠ ቲኬቶችን ማምጣት
