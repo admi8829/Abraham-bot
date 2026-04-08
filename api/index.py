@@ -121,12 +121,12 @@ async def start_handler(message: types.Message):
     await message.answer(menu_text, reply_markup=get_main_menu(lang=user_lang))
             
 # ለቋንቋ መቀየሪያ
+# --- ከላይ ያሉት የ Import እና Initialization ክፍሎች እንዳሉ ሆነው ---
 
 # ለቋንቋ መቀየሪያ (በሁለቱም ቋንቋ እንዲሰራ)
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
 async def show_language_options(message: types.Message):
     builder = InlineKeyboardBuilder()
-    # callback_data በትክክል መዘጋጀቱን አረጋግጥ
     builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"))
     builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
     
@@ -139,18 +139,15 @@ async def show_language_options(message: types.Message):
 async def handle_buy_ticket(message: types.Message):
     user_id = message.from_user.id
     
-    # 1. መጀመሪያ ተጠቃሚው ስልክ ቁጥር እንዳለው ከዳታቤዝ ማረጋገጥ
     res = supabase.table("users").select("phone", "lang").eq("user_id", user_id).execute()
     user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
     lang = user_data.get("lang", "am")
     
-    # 2. ስልክ ቁጥር ከሌለው እንዲልክ መጠየቅ
     if not user_data.get("phone"):
         msg = "ትኬት ለመግዛት መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት።" if lang == "am" else "You must share your phone number first to buy a ticket."
         await message.answer(msg, reply_markup=get_phone_keyboard(lang))
         return
 
-    # 3. ስልክ ቁጥር ካለው የሽልማት ዝርዝር እና የክፍያ በተን ማሳየት
     if lang == "am":
         prize_msg = (
             "🏆 የሽልማት ዝርዝር፦\n"
@@ -170,14 +167,12 @@ async def handle_buy_ticket(message: types.Message):
         )
         pay_btn = "💳 Pay"
 
-    # የክፍያ Inline Button
     pay_builder = InlineKeyboardBuilder()
     pay_builder.add(types.InlineKeyboardButton(text=pay_btn, callback_data="start_payment"))
     
     await message.answer(prize_msg, reply_markup=pay_builder.as_markup())
 
-
-
+# --- የተቀሩት የ Callback እና Webhook ክፍሎች ይቀጥላሉ ---
 @dp.callback_query(F.data.startswith("set_"))
 async def handle_language_choice(callback: types.CallbackQuery):
     # 'set_am' ከሆነ am ን ይወስዳል፣ 'set_en' ከሆነ en ን ይወስዳል
