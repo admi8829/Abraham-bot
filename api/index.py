@@ -54,6 +54,14 @@ def get_start_inline():
     return builder.as_markup()
 
 
+def get_phone_keyboard(lang="am"):
+    kb = ReplyKeyboardBuilder()
+    # እንደ ቋንቋው ምርጫ የጽሁፍ መልዕክቱን ይቀይራል
+    text = "📱 ስልክ ቁጥርህን ላክ" if lang == "am" else "📱 Send Phone Number"
+    kb.row(types.KeyboardButton(text=text, request_contact=True)) # ስልክ ለመጠየቅ ወሳኙ መስመር
+    return kb.as_markup(resize_keyboard=True)
+    
+
 # --- Handlers (ትዕዛዞች) ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
@@ -126,6 +134,48 @@ async def show_language_options(message: types.Message):
         "እባክዎ ቋንቋ ይምረጡ / Please choose a language:", 
         reply_markup=builder.as_markup()
     )
+    
+ @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
+async def handle_buy_ticket(message: types.Message):
+    user_id = message.from_user.id
+    
+    # 1. መጀመሪያ ተጠቃሚው ስልክ ቁጥር እንዳለው ከዳታቤዝ ማረጋገጥ
+    res = supabase.table("users").select("phone", "lang").eq("user_id", user_id).execute()
+    user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
+    lang = user_data.get("lang", "am")
+    
+    # 2. ስልክ ቁጥር ከሌለው እንዲልክ መጠየቅ
+    if not user_data.get("phone"):
+        msg = "ትኬት ለመግዛት መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት።" if lang == "am" else "You must share your phone number first to buy a ticket."
+        await message.answer(msg, reply_markup=get_phone_keyboard(lang))
+        return
+
+    # 3. ስልክ ቁጥር ካለው የሽልማት ዝርዝር እና የክፍያ በተን ማሳየት
+    if lang == "am":
+        prize_msg = (
+            "🏆 የሽልማት ዝርዝር፦\n"
+            "1ኛ እጣ: 100,000 ብር\n"
+            "2ኛ እጣ: 50,000 ብር\n\n"
+            "💵 የትኬት ዋጋ: 50 ብር\n"
+            "ለመቀጠል 'ክፈል' የሚለውን ይጫኑ።"
+        )
+        pay_btn = "💳 ክፈል"
+    else:
+        prize_msg = (
+            "🏆 Prize List:\n"
+            "1st Prize: 100,000 ETB\n"
+            "2nd Prize: 50,000 ETB\n\n"
+            "💵 Ticket Price: 50 ETB\n"
+            "Click 'Pay' to continue."
+        )
+        pay_btn = "💳 Pay"
+
+    # የክፍያ Inline Button
+    pay_builder = InlineKeyboardBuilder()
+    pay_builder.add(types.InlineKeyboardButton(text=pay_btn, callback_data="start_payment"))
+    
+    await message.answer(prize_msg, reply_markup=pay_builder.as_markup())
+
 
 
 @dp.callback_query(F.data.startswith("set_"))
@@ -157,6 +207,29 @@ async def handle_language_choice(callback: types.CallbackQuery):
     except Exception as e:
         print(f"Error: {e}")
         await callback.answer("Error occurred", show_alert=True)
+
+@dp.message(F.contact)
+async def handle_contact(message: types.Message):
+    user_id = message.from_user.id
+    phone = message.contact.phone_number # የተላከው ስልክ ቁጥር
+    
+    try:
+        # 1. ስልኩን ዳታቤዝ ላይ ማዘመን
+        supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+        
+        # 2. ቋንቋውን ማግኘት
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = res.data[0].get("lang", "am") if res.data else "am"
+        
+        # 3. ስልኩ መመዝገቡን አረጋግጦ ወደ ዋናው ሜኑ መመለስ
+        success_msg = "✅ ስልክዎ ተመዝግቧል! አሁን 'አዲስ ትኬት ቁረጥ' የሚለውን በመጫን መቀጠል ይችላሉ።" if lang == "am" else "✅ Phone registered! Now click 'Buy New Ticket' to continue."
+        
+        await message.answer(success_msg, reply_markup=get_main_menu(lang))
+        
+    except Exception as e:
+        print(f"Error saving phone: {e}")
+        await message.answer("ስህተት አጋጥሟል፣ እባክዎ ደግመው ይሞክሩ።")
+        
         
 # --- Webhook Endpoint ---
 
