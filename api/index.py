@@ -1,5 +1,6 @@
 import os
 import asyncio
+import random  # ይህ ለሎተሪ ቁጥር ማመንጫ እንዲረዳህ ተጨምሯል
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -11,6 +12,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BASE_URL = os.getenv("WEBHOOK_URL") 
+ADMIN_ID = os.getenv("ADMIN_ID") # የአንተን ID ከVercel Dashboard ላይ መጨመርህን አትርሳ
 
 # 2. Initialization
 bot = Bot(token=TOKEN)
