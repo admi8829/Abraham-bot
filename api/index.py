@@ -71,18 +71,81 @@ async def start_handler(message: types.Message):
     except: await message.answer(caption, reply_markup=get_start_inline())
     
     await message.answer("ምርጫዎን ይምረጡ / Choose option:", reply_markup=get_main_menu(user_lang))
-
-# 1. የቲኬት መግዣ መረጃ
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
-async def buy_ticket_info(message: types.Message):
+async def buy_ticket_step1(message: types.Message):
     res = supabase.table("users").select("lang").eq("user_id", message.from_user.id).execute()
     lang = res.data[0].get('lang', 'am') if res.data else 'am'
     
+    # ስልክ ቁጥር መጠየቂያ Button
+    kb = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
     if lang == "am":
-        text = "🏆 **የዕጣ ዝርዝር**\n1ኛ: 10,000 ETB | 2ኛ: 5,000 ETB\n\n🎫 **ዋጋ: 50 ብር**\n\nበ Telebirr (09XXXXXXXX) ከፈሉ በኋላ ደረሰኙን (Screenshot) እዚህ ይላኩ።"
+        text = "🔐 **ደህንነት**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ከታች ያለውን ቁልፍ ይጫኑ።"
     else:
-        text = "🏆 **Prize List**\n1st: 10,000 ETB | 2nd: 5,000 ETB\n\n🎫 **Price: 50 ETB**\n\nPay via Telebirr (09XXXXXXXX) and send the Screenshot here."
-    await message.answer(text)
+        text = "🔐 **Security**\n\nTo buy a ticket, please share your contact first. Click the button below."
+    
+    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+
+# ለ. ስልኩን ሲልክ ዳታቤዝ ውስጥ መመዝገብ እና የሽልማት መረጃ ማሳየት
+@dp.message(F.contact)
+async def handle_contact(message: types.Message):
+    user_id = message.from_user.id
+    phone = message.contact.phone_number
+    
+    # 1. ስልኩን በ Users table ውስጥ መመዝገብ/Update ማድረግ
+    supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+    
+    # 2. የቋንቋ ምርጫ ማወቅ
+    res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+
+    # 3. ሽልማቶችን ከዳታቤዝ ማምጣት
+    prizes_res = supabase.table("prizes").select("*").eq("lang", lang).execute()
+    prizes = prizes_res.data
+    prize_text = "\n".join([f"🏆 {p['rank']}: **{p['amount']}**" for p in prizes])
+
+    # 4. ቀጣይ Play/Pay Button ማዘጋጀት
+    inline_kb = InlineKeyboardBuilder()
+    pay_btn_text = "💳 ክፍያ ፈጽም (Pay Now)" if lang == "am" else "💳 Pay Now"
+    inline_kb.button(text=pay_btn_text, callback_data="show_payment")
+
+    if lang == "am":
+        info_text = (
+            "✅ **ስልክዎ ተረጋግጧል!**\n\n"
+            f"{prize_text}\n\n"
+            "🎫 **የአንድ ትኬት ዋጋ: 50 ብር**\n\n"
+            "ለመቀጠል ከታች ያለውን የክፍያ ቁልፍ ይጫኑ።"
+        )
+    else:
+        info_text = (
+            "✅ **Phone Verified!**\n\n"
+            f"{prize_text}\n\n"
+            "🎫 **Price: 50 ETB per ticket**\n\n"
+            "Click the button below to proceed."
+        )
+
+    await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="Markdown")
+
+# ሐ. የክፍያ መረጃ (Callback)
+@dp.callback_query(F.data == "show_payment")
+async def process_payment_info(callback: types.CallbackQuery):
+    res_lang = supabase.table("users").select("lang").eq("user_id", callback.from_user.id).execute()
+    lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+
+    if lang == "am":
+        text = "💳 **የክፍያ መመሪያ**\n\nበ Telebirr (09XXXXXXXX) 50 ብር ይላኩ።\nከከፈሉ በኋላ ደረሰኙን (Screenshot) እዚህ ይላኩ።"
+    else:
+        text = "💳 **Payment Instruction**\n\nPay 50 ETB via Telebirr (09XXXXXXXX).\nAfter payment, send the Screenshot here."
+    
+    await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
+    
 
 # 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
 @dp.message(F.photo)
