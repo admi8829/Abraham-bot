@@ -477,15 +477,47 @@ async def help_handler(message: types.Message):
 # 3. አድሚኑ ሲያጸድቅ
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_payment(callback: types.CallbackQuery):
-    target_id = int(callback.data.split("_")[1])
-    ticket_no = f"LOT-{random.randint(10000, 99999)}"
+    user_id = int(callback.data.split("_")[1])
     
-    supabase.table("tickets").insert({"user_id": target_id, "ticket_number": ticket_no, "status": "approved"}).execute()
+    # 1. የዘፈቀደ የሎተሪ ቁጥር ማመንጨት (ለምሳሌ 5 ዲጂት)
+    ticket_number = f"LOT-{random.randint(10000, 99999)}"
     
-    await bot.send_message(target_id, f"🎉 ክፍያዎ ጸድቋል! የሎተሪ ቁጥርዎ: {ticket_no}")
-    await callback.message.edit_caption(caption=f"✅ ጸድቋል! ቁጥር: {ticket_no}")
-    await callback.answer("Approved!")
+    try:
+        # 2. በዳታቤዝ ውስጥ ትኬቱን መመዝገብ (Status: approved)
+        supabase.table("tickets").insert({
+            "user_id": user_id,
+            "ticket_number": ticket_number,
+            "status": "approved"
+        }).execute()
 
+        # 3. የተጠቃሚውን መረጃ (ቋንቋ እና ስም) ማምጣት
+        res = supabase.table("users").select("lang", "first_name").eq("user_id", user_id).execute()
+        user_data = res.data[0] if res.data else {"lang": "am", "first_name": "User"}
+        lang = user_data.get('lang', 'am')
+        first_name = user_data.get('first_name', 'User')
+
+        # 4. ለተጠቃሚው በ Inbox የምስራች መላክ
+        if lang == "am":
+            msg = f"🎉 **ክፍያዎ ጸድቋል!**\n\nየሎተሪ ቁጥርዎ፦ `{ticket_number}`"
+        else:
+            msg = f"🎉 **Payment Approved!**\n\nYour Lottery Number: `{ticket_number}`"
+        
+        await bot.send_message(user_id, msg, parse_mode="Markdown")
+
+        # 🌟 5. ለቻናል ማሳወቂያ መላክ (የጠየቅከው ክፍል እዚህ ይገባል)
+        await notify_ticket_purchase(first_name, ticket_number)
+
+        # 6. አድሚኑ ላይ የነበረውን በተን መቀየር (Updated UI)
+        await callback.message.edit_caption(
+            caption=f"{callback.message.caption}\n\n✅ **ጸድቋል (Approved)**\nቁጥር፦ `{ticket_number}`",
+            reply_markup=None # በተኖቹን ያጠፋቸዋል
+        )
+        await callback.answer("ትኬቱ ጽድቋል!")
+
+    except Exception as e:
+        print(f"Approve Error: {e}")
+        await callback.answer("ስህተት ተከስቷል!")
+        
 # 4. አድሚኑ ውድቅ ሲያደርግ
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_payment(callback: types.CallbackQuery):
