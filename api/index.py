@@ -69,7 +69,24 @@ def get_start_inline():
     builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
     builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
     return builder.as_markup()
-    
+
+#--- አዲሱን ፈንክሽን እዚህ ጋር ጨምር ---
+async def notify_ticket_purchase(name, ticket):
+    try:
+        text = (
+            f"🔔 **አዲስ የትኬት ሽያጭ!**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 **ስም:** {name}\n"
+            f"🎫 **የትኬት ቁጥር:** `{ticket}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 ቀጣዩ አሸናፊ እርስዎ ይሁኑ!"
+        )
+        await bot.send_message(chat_id=CHANNEL_ID, text=text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Channel Notification Error: {e}")
+# -----------------------------------
+
+# ከዚያ @dp.message(Command("start")) ይቀጥላል...
 # --- Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
