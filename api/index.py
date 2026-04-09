@@ -1,3 +1,4 @@
+
 import os
 import asyncio
 import random
@@ -5,6 +6,7 @@ from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from supabase import create_client, Client
 
 # 1. Environment Variables
@@ -50,7 +52,7 @@ def get_start_inline():
     builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
     builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
     return builder.as_markup()
-
+    
 # --- Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
