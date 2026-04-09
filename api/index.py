@@ -200,37 +200,57 @@ async def handle_photos(message: types.Message):
         await message.answer("የፎቶ ብሮድካስት ተጀምሯል...")
         # ... መላኪያ ኮድ ...
         return # ብሮድካስት ከሆነ እዚህ ጋር ይቁም፣ ወደ ደረሰኝ መቀበያው አይለፍ
-
-    # --- ለ. ፎቶው የደረሰኝ ስክሪንሻት ከሆነ (ከተራ ተጠቃሚ የመጣ) ---
-    else:
-        # ይህ የድሮው የ handle_screenshot ኮድህ ነው
-        photo_id = message.photo[-1].file_id
-        username = message.from_user.username or "N/A"
-
-        # ለዳታቤዝ መመዝገብ
-        supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
-
-        # ለአድሚን (ለአንተ) መላክ
-        admin_kb = InlineKeyboardBuilder()
-        admin_kb.button(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}")
-        admin_kb.button(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}")
-        
-        await bot.send_photo(
-            chat_id=int(ADMIN_ID),
-            photo=photo_id,
-            caption=f"አዲስ የክፍያ ጥያቄ ከ፦ @{username}\nUser ID: {user_id}",
-            reply_markup=admin_kb.as_markup()
-        )
-                # የቋንቋ ምርጫውን ከላይ ካለው 'lang' ተለዋዋጭ በመጠቀም
-        if lang == "am":
-            confirmation_text = "✅ ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክልዎታል።"
+                # ለ. የደረሰኝ ስክሪንሻት ከሆነ (ከተራ ተጠቃሚ የመጣ)
+        # --------------------------------------------------
         else:
-            confirmation_text = "✅ Receipt sent! You will receive your lottery number once the admin verifies it."
-            
-        await message.answer(confirmation_text)
-        
-        
-    
+            photo_id = message.photo[-1].file_id
+            user_id = message.from_user.id
+            username = message.from_user.username or "N/A"
+
+            # 1. የተጠቃሚውን ቋንቋ እና ስልክ ከዳታቤዝ ማምጣት
+            res_user = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
+            user_data = res_user.data[0] if res_user.data else {"lang": "am", "phone": "N/A"}
+            lang = user_data.get('lang', 'am')
+            phone = user_data.get('phone', 'N/A')
+
+            # 2. ለዳታቤዝ መመዝገብ
+            supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
+
+            # 3. ለአድሚን (ለአንተ) የሚላከው መልእክት ዲዛይን
+            admin_text = (
+                "🔔 **አዲስ የክፍያ ጥያቄ ደርሷል!**\n\n"
+                "👤 **የተጠቃሚ መረጃ፦**\n"
+                f"├─ 👤 Username: @{username}\n"
+                f"├─ 🆔 User ID: `{user_id}`\n"
+                f"└─ 📞 ስልክ፦ `{phone}`\n\n"
+                "📝 **መመሪያ፦**\n"
+                "የላኩትን ደረሰኝ ካረጋገጡ በኋላ ያጽድቁ ወይም ይሰርዙ።"
+            )
+
+            # 4. የአድሚን ኢንላይን በተኖች (Approve/Reject)
+            admin_kb = InlineKeyboardBuilder()
+            admin_kb.add(types.InlineKeyboardButton(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}"))
+            admin_kb.add(types.InlineKeyboardButton(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}"))
+            admin_kb.adjust(2) # በአንድ መስመር ሁለት በተን
+
+            # 5. ለአድሚኑ መላክ
+            await bot.send_photo(
+                chat_id=int(ADMIN_ID),
+                photo=photo_id,
+                caption=admin_text,
+                reply_markup=admin_kb.as_markup(),
+                parse_mode="Markdown"
+            )
+
+            # 6. ለተጠቃሚው የሚላክ ማረጋገጫ (በቋንቋው)
+            if lang == "am":
+                confirmation_text = "✅ **ደረሰኙ ተልኳል።**\nአስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክልዎታል።"
+            else:
+                confirmation_text = "✅ **Receipt sent!**\nYou will receive your lottery number once the admin verifies it."
+                
+            await message.answer(confirmation_text, parse_mode="Markdown")
+
+
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
 async def my_info_handler(message: types.Message):
     user_id = message.from_user.id
