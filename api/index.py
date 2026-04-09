@@ -474,58 +474,91 @@ async def help_handler(message: types.Message):
     await message.answer(help_text, reply_markup=kb.as_markup(), parse_mode="Markdown")
         
 
-# 3. አድሚኑ ሲያጸድቅ
+# 3. አድሚኑ ሲያጸድ# 2. Approve Handler
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_payment(callback: types.CallbackQuery):
     user_id = int(callback.data.split("_")[1])
     
-    # 1. የዘፈቀደ የሎተሪ ቁጥር ማመንጨት (ለምሳሌ 5 ዲጂት)
+    # የዘፈቀደ ቁጥር (እንዳይደገም ቼክ ማድረግ ቢቻል ይመረጣል)
     ticket_number = f"LOT-{random.randint(10000, 99999)}"
     
     try:
-        # 2. በዳታቤዝ ውስጥ ትኬቱን መመዝገብ (Status: approved)
+        # ዳታቤዝ ምዝገባ
         supabase.table("tickets").insert({
             "user_id": user_id,
             "ticket_number": ticket_number,
             "status": "approved"
         }).execute()
 
-        # 3. የተጠቃሚውን መረጃ (ቋንቋ እና ስም) ማምጣት
+        # የተጠቃሚ መረጃ ማምጣት
         res = supabase.table("users").select("lang", "first_name").eq("user_id", user_id).execute()
         user_data = res.data[0] if res.data else {"lang": "am", "first_name": "User"}
         lang = user_data.get('lang', 'am')
         first_name = user_data.get('first_name', 'User')
 
-        # 4. ለተጠቃሚው በ Inbox የምስራች መላክ
+        # ለተጠቃሚው በ Inbox
         if lang == "am":
-            msg = f"🎉 **ክፍያዎ ጸድቋል!**\n\nየሎተሪ ቁጥርዎ፦ `{ticket_number}`"
+            msg = (
+                "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
+                "የከፈሉት ክፍያ ተረጋግጦ ጸድቋል።\n"
+                f"🎫 የእርስዎ የሎተሪ ቁጥር፦ `{ticket_number}`\n\n"
+                "መልካም እድል!"
+            )
         else:
-            msg = f"🎉 **Payment Approved!**\n\nYour Lottery Number: `{ticket_number}`"
+            msg = (
+                "🎊 **Congratulations!** 🎊\n\n"
+                "Your payment has been verified.\n"
+                f"🎫 Your Lottery Number: `{ticket_number}`\n\n"
+                "Good Luck!"
+            )
         
         await bot.send_message(user_id, msg, parse_mode="Markdown")
 
-        # 🌟 5. ለቻናል ማሳወቂያ መላክ (የጠየቅከው ክፍል እዚህ ይገባል)
+        # ለቻናል ማሳወቅ
         await notify_ticket_purchase(first_name, ticket_number)
 
-        # 6. አድሚኑ ላይ የነበረውን በተን መቀየር (Updated UI)
-        await callback.message.edit_caption(
-            caption=f"{callback.message.caption}\n\n✅ **ጸድቋል (Approved)**\nቁጥር፦ `{ticket_number}`",
-            reply_markup=None # በተኖቹን ያጠፋቸዋል
+        # አድሚኑ ላይ ያለውን ፎቶ Caption ማሳመር
+        new_caption = (
+            f"{callback.message.caption}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ **ሁኔታ፦ ጸድቋል (Approved)**\n"
+            f"🎫 **የተሰጠ ቁጥር፦** `{ticket_number}`"
         )
-        await callback.answer("ትኬቱ ጽድቋል!")
+        await callback.message.edit_caption(caption=new_caption, reply_markup=None, parse_mode="Markdown")
+        await callback.answer("✅ ትኬቱ ጸድቋል!")
 
     except Exception as e:
         print(f"Approve Error: {e}")
-        await callback.answer("ስህተት ተከስቷል!")
-        
-# 4. አድሚኑ ውድቅ ሲያደርግ
+        await callback.answer("❌ ስህተት፦ ዳታቤዝ ላይ ችግር አለ!")
+
+# 3. Reject Handler
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_payment(callback: types.CallbackQuery):
     target_id = int(callback.data.split("_")[1])
-    await bot.send_message(target_id, "❌ ይቅርታ፣ የላኩት ደረሰኝ ተቀባይነት አላገኘም።")
-    await callback.message.edit_caption(caption="❌ ውድቅ ተደርጓል።")
-    await callback.answer("Rejected")
+    
+    # የተጠቃሚውን ቋንቋ ማወቅ
+    res = supabase.table("users").select("lang").eq("user_id", target_id).execute()
+    lang = res.data[0].get('lang', 'am') if res.data else 'am'
 
+    if lang == "am":
+        rej_msg = "❌ **ይቅርታ፣ የላኩት ደረሰኝ ተቀባይነት አላገኘም።**\nእባክዎ ትክክለኛውን የክፍያ ማረጋገጫ በድጋሚ ይላኩ ወይም አስተዳዳሪውን ያነጋግሩ።"
+    else:
+        rej_msg = "❌ **Sorry, your receipt has been rejected.**\nPlease send a valid proof of payment or contact support."
+
+    try:
+        await bot.send_message(target_id, rej_msg, parse_mode="Markdown")
+        
+        new_caption = (
+            f"{callback.message.caption}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "❌ **ሁኔታ፦ ውድቅ ተደርጓል (Rejected)**"
+        )
+        await callback.message.edit_caption(caption=new_caption, reply_markup=None, parse_mode="Markdown")
+        await callback.answer("❌ ውድቅ ተደርጓል")
+    except Exception as e:
+        print(f"Reject Error: {e}")
+        await callback.answer("ስህተት ተከስቷል!")
+    
 # 5. ቋንቋ መቀየሪያ
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
 async def show_language_options(message: types.Message):
