@@ -14,17 +14,25 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BASE_URL = os.getenv("WEBHOOK_URL")
 
-# ID-ዎቹን ወደ Integer (ቁጥር) መቀየር ግዴታ ነው
+# ID-ዎቹን ወደ Integer (ቁጥር) መቀየር
 try:
-    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-    # CHANNEL_ID-ን ስትቀይር ስህተት እንዳይፈጠር እንዲህ አድርገው
-    raw_channel_id = os.getenv("CHANNEL_ID", "0")
-    CHANNEL_ID = int(raw_channel_id)
-except (ValueError, TypeError):
-    print("❌ ስህተት፦ ADMIN_ID ወይም CHANNEL_ID በቁጥር አልተገቡም!")
+    # .strip() በመጠቀም በስህተት የሚገቡ ባዶ ቦታዎችን (Spaces) እናስወግዳለን
+    admin_env = os.getenv("ADMIN_ID", "0").strip()
+    channel_env = os.getenv("CHANNEL_ID", "0").strip()
+
+    # ባዶ ካልሆኑ ወደ ቁጥር ይቀየራሉ፣ ካልሆነ 0 ይሆናሉ
+    ADMIN_ID = int(admin_env) if admin_env else 0
+    CHANNEL_ID = int(channel_env) if channel_env else 0
+
+    # አስፈላጊ መረጃዎች አለመኖራቸውን ለማረጋገጥ
+    if ADMIN_ID == 0 or CHANNEL_ID == 0:
+        print("⚠️ ማስጠንቀቂያ፦ ADMIN_ID ወይም CHANNEL_ID አልተገለጸም (0 ነው)!")
+
+except ValueError:
+    print("❌ ስህተት፦ ADMIN_ID ወይም CHANNEL_ID ቁጥር መሆን አለባቸው! እባክዎ በ .env ፋይል ላይ ያስተካክሉ።")
     ADMIN_ID = 0
     CHANNEL_ID = 0
-    
+ 
 # 2. Initialization
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
