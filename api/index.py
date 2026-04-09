@@ -334,7 +334,49 @@ async def show_winners(message: types.Message):
         print(f"Error fetching winners: {e}")
         await message.answer("አሸናፊዎችን ማግኘት አልተቻለም።")
         
-                
+@dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
+async def invite_friends_handler(message: types.Message):
+    user_id = message.from_user.id
+    bot_info = await bot.get_me()
+    # የራሳቸው ልዩ የግብዣ ሊንክ
+    invite_link = f"https://t.me/{bot_info.username}?start={user_id}"
+    
+    # ቋንቋውን ማወቅ
+    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    lang = res.data[0].get('lang', 'am') if res.data else 'am'
+
+    # ስንት ሰው እንደጋበዙ ከዳታቤዝ መቁጠር
+    ref_count_res = supabase.table("users").select("user_id", count="exact").eq("referred_by", user_id).execute()
+    count = ref_count_res.count if ref_count_res.count is not None else 0
+
+    if lang == "am":
+        text = (
+            "👥 **ጓደኞችዎን ይጋብዙና ሽልማት ያግኙ!**\n\n"
+            "የእርስዎን ልዩ የመጋበዣ ሊንክ ለጓደኞችዎ በመላክ ቦቱን እንዲጠቀሙ ይጋብዙ። "
+            "ብዙ ሰው በጋበዙ ቁጥር የእድል ቁጥር የማግኘት እድልዎ ይጨምራል!\n\n"
+            f"🔗 **የእርስዎ ሊንክ፦**\n`{invite_link}`\n\n"
+            f"📊 **የጋበዙት ሰው ብዛት፦** `{count}` ሰዎች"
+        )
+        share_text = "🎁 እዚህ ቦት ላይ ትኬት ቁርጠው የ10,000 ብር አሸናፊ ይሁኑ! ለመጀመር ሊንኩን ይጫኑ፦"
+        btn_msg = "📲 ለጓደኛ ላክ (Share)"
+    else:
+        text = (
+            "👥 **Invite Friends & Win!**\n\n"
+            "Share your unique link with friends and invite them to the bot. "
+            "The more people you invite, the higher your chances of winning!\n\n"
+            f"🔗 **Your Invite Link:**\n`{invite_link}`\n\n"
+            f"📊 **Total Invited:** `{count}` people"
+        )
+        share_text = "🎁 Win 10,000 ETB by buying a lottery ticket! Click here to start:"
+        btn_msg = "📲 Share Link"
+
+    # በቀጥታ ለሰው እንዲልኩ (Share Button)
+    share_url = f"https://t.me/share/url?url={invite_link}&text={share_text}"
+    kb = InlineKeyboardBuilder()
+    kb.row(types.InlineKeyboardButton(text=btn_msg, url=share_url))
+    
+    await message.answer(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
+        
 
 # 3. አድሚኑ ሲያጸድቅ
 @dp.callback_query(F.data.startswith("approve_"))
