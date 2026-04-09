@@ -52,26 +52,44 @@ def get_start_inline():
     return builder.as_markup()
 
 # --- Handlers ---
-
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or "User"
+    
     try:
+        # የተጠቃሚውን ቋንቋ መፈተሽ
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        user_lang = res.data[0].get('lang', 'am') if res.data else 'am'
+        
         if not res.data:
-            supabase.table("users").insert({"user_id": user_id, "username": username, "lang": 'am'}).execute()
-    except Exception: user_lang = 'am'
+            # አዲስ ተጠቃሚ ከሆነ መመዝገብ
+            user_lang = 'am'
+            supabase.table("users").insert({
+                "user_id": user_id, 
+                "username": username, 
+                "lang": 'am'
+            }).execute()
+        else:
+            user_lang = res.data[0].get('lang', 'am')
+    except Exception as e:
+        print(f"Database error: {e}")
+        user_lang = 'am'
 
-    caption = "እንኳን ደህና መጡ! ለመጀመር 'አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ።" if user_lang == "am" else "Welcome! Click 'Buy New Ticket' to start."
-    gif_id = "CgACAgQAAxkBAAIBmWnVKif0xiwbmWxyUfBzGneJthwZAAKxGQACnsipUjQrEigho6qBOwQ"
+    # መልእክቱን ማዘጋጀት (ያለ GIF)
+    if user_lang == "am":
+        text = "👋 **እንኳን ደህና መጡ!**\n\nለመጀመር '➕ አዲስ ትኬት ቁረጥ' የሚለውን ቁልፍ ይጫኑ።"
+        menu_text = "ምርጫዎን ይምረጡ፦"
+    else:
+        text = "👋 **Welcome!**\n\nClick '➕ Buy New Ticket' to start."
+        menu_text = "Choose an option:"
+
+    # 1. መጀመሪያ ኢንላይን በተኑን (Website/YouTube) መላክ
+    await message.answer(text, reply_markup=get_start_inline(), parse_mode="Markdown")
     
-    try: await message.answer_animation(animation=gif_id, caption=caption, reply_markup=get_start_inline())
-    except: await message.answer(caption, reply_markup=get_start_inline())
+    # 2. በመቀጠል ዋናውን ሜኑ (Reply Buttons) መላክ
+    await message.answer(menu_text, reply_markup=get_main_menu(user_lang))
     
-    await message.answer("ምርጫዎን ይምረጡ / Choose option:", reply_markup=get_main_menu(user_lang))
-    
+
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message):
     res = supabase.table("users").select("lang").eq("user_id", message.from_user.id).execute()
