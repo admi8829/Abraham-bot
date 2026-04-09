@@ -594,7 +594,7 @@ async def pick_winner(message: types.Message):
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    CHANNEL_ID = "-1003878868241"
+    CHANNEL_ID = "-1003866954136"
 
     try:
         # 1. 'approved' የሆኑ እና ገና ያልሸለሙ ትኬቶችን ብቻ ማምጣት
