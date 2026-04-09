@@ -14,7 +14,8 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BASE_URL = os.getenv("WEBHOOK_URL") 
 ADMIN_ID = os.getenv("ADMIN_ID") 
-
+# ከ Vercel Environment የሚመጣ የቻናል ID
+CHANNEL_ID = os.getenv("CHANNEL_ID") 
 # 2. Initialization
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
