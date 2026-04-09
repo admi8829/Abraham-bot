@@ -65,7 +65,7 @@ async def start_handler(message: types.Message):
         if member.status in ["left", "kicked"]:
             # ቻናሉን ካልተቀላቀለ የሚመጣ መልእክት
             kb = InlineKeyboardBuilder()
-            kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/your_channel_link")) # የቻናልህን ሊንክ እዚህ ቀይረው
+            kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/ethiouh")) # የቻናልህን ሊንክ እዚህ ቀይረው
             kb.row(types.InlineKeyboardButton(text="🔄 ተቀላቅያለሁ / I joined", callback_data="check_join"))
             
             join_text = (
