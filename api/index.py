@@ -77,61 +77,51 @@ async def buy_ticket_step1(message: types.Message):
     res = supabase.table("users").select("lang").eq("user_id", message.from_user.id).execute()
     lang = res.data[0].get('lang', 'am') if res.data else 'am'
     
-    # ስልክ ቁጥር መጠየቂያ Button
+    # የድሮው ሜኑ እንዲጠፋ እና ስልክ ቁጥር ብቻ እንዲመጣ
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True)]
         ],
         resize_keyboard=True,
-        one_time_keyboard=True
+        one_time_keyboard=True # ቁጥሩን ሲልክ በተኑ ይጠፋል
     )
 
-    if lang == "am":
-        text = "🔐 **ደህንነት**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ከታች ያለውን ቁልፍ ይጫኑ።"
-    else:
-        text = "🔐 **Security**\n\nTo buy a ticket, please share your contact first. Click the button below."
+    text = "🔐 **ደህንነት**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት።" if lang == "am" else "🔐 **Security**\n\nPlease share your contact first."
     
     await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-
+    
 # ለ. ስልኩን ሲልክ ዳታቤዝ ውስጥ መመዝገብ እና የሽልማት መረጃ ማሳየት
 @dp.message(F.contact)
 async def handle_contact(message: types.Message):
     user_id = message.from_user.id
     phone = message.contact.phone_number
     
-    # 1. ስልኩን በ Users table ውስጥ መመዝገብ/Update ማድረግ
+    # ስልኩን መመዝገብ
     supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
     
-    # 2. የቋንቋ ምርጫ ማወቅ
     res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
     lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
 
-    # 3. ሽልማቶችን ከዳታቤዝ ማምጣት
     prizes_res = supabase.table("prizes").select("*").eq("lang", lang).execute()
     prizes = prizes_res.data
     prize_text = "\n".join([f"🏆 {p['rank']}: **{p['amount']}**" for p in prizes])
 
-    # 4. ቀጣይ Play/Pay Button ማዘጋጀት
     inline_kb = InlineKeyboardBuilder()
     pay_btn_text = "💳 ክፍያ ፈጽም (Pay Now)" if lang == "am" else "💳 Pay Now"
     inline_kb.button(text=pay_btn_text, callback_data="show_payment")
 
-    if lang == "am":
-        info_text = (
-            "✅ **ስልክዎ ተረጋግጧል!**\n\n"
-            f"{prize_text}\n\n"
-            "🎫 **የአንድ ትኬት ዋጋ: 50 ብር**\n\n"
-            "ለመቀጠል ከታች ያለውን የክፍያ ቁልፍ ይጫኑ።"
-        )
-    else:
-        info_text = (
-            "✅ **Phone Verified!**\n\n"
-            f"{prize_text}\n\n"
-            "🎫 **Price: 50 ETB per ticket**\n\n"
-            "Click the button below to proceed."
-        )
+    info_text = "✅ **ስልክዎ ተረጋግጧል!**\n\n" if lang == "am" else "✅ **Phone Verified!**\n\n"
+    info_text += f"{prize_text}\n\n🎫 **የአንድ ትኬት ዋጋ: 50 ብር**"
 
-    await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="Markdown")
+    # እዚህ ጋር ነው 'reply_markup' የምንመልሰው
+    await message.answer(
+        info_text, 
+        reply_markup=get_main_menu(lang), # ዋናው ሜኑ እዚህ ጋር ይመለሳል
+        parse_mode="Markdown"
+    )
+    # የክፍያ በተኑን ለብቻው መላክ (Inline ስለሆነ ኪቦርዱን አይረብሽም)
+    await message.answer("ለመቀጠል የክፍያ ቁልፉን ይጫኑ፦", reply_markup=inline_kb.as_markup())
+    
 
 # ሐ. የክፍያ መረጃ (Callback)
 @dp.callback_query(F.data == "show_payment")
