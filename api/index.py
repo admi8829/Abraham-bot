@@ -537,18 +537,35 @@ async def help_handler(message: types.Message):
     kb.row(types.InlineKeyboardButton(text=btn_text, url="https://t.me/your_admin_username"))
     
     await message.answer(help_text, reply_markup=kb.as_markup(), parse_mode="Markdown")
-        
 
-# 3. አድሚኑ ሲያጸድ# 2. Approve Handler
+# 2. Approve Handler (የተስተካከለ)
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_payment(callback: types.CallbackQuery):
     user_id = int(callback.data.split("_")[1])
     
-    # የዘፈቀደ ቁጥር (እንዳይደገም ቼክ ማድረግ ቢቻል ይመረጣል)
-    ticket_number = f"LOT-{random.randint(10000, 99999)}"
+    # --- 1) የቲኬት ቁጥር መደጋገምን በ while loop መከላከል ---
+    is_unique = False
+    ticket_number = ""
     
+    while not is_unique:
+        # የዘፈቀደ ቁጥር ማመንጨት
+        random_num = random.randint(10000, 99999)
+        ticket_number = f"LOT-{random_num}"
+        
+        # ዳታቤዝ ውስጥ ይህ ቁጥር መኖሩን ቼክ ማድረግ
+        check_res = supabase.table("tickets").select("ticket_number").eq("ticket_number", ticket_number).execute()
+        
+        # ቁጥሩ ከሌለ loop ይቆማል
+        if not check_res.data:
+            is_unique = True
+
     try:
-        # ዳታቤዝ ምዝገባ
+        # --- 2) የክፍያ ሁኔታን (Payment Status) ማዘመን ---
+        # በ payments table ላይ ያለውን status ወደ 'approved' መቀየር
+        # ማሳሰቢያ፡ በ user_id እና በመጨረሻው 'pending' ክፍያ ላይ የተመሰረተ ነው
+        supabase.table("payments").update({"status": "approved"}).eq("user_id", user_id).eq("status", "pending").execute()
+
+        # የቲኬት ዳታቤዝ ምዝገባ
         supabase.table("tickets").insert({
             "user_id": user_id,
             "ticket_number": ticket_number,
@@ -561,7 +578,7 @@ async def approve_payment(callback: types.CallbackQuery):
         lang = user_data.get('lang', 'am')
         first_name = user_data.get('first_name', 'User')
 
-        # ለተጠቃሚው በ Inbox
+        # ለተጠቃሚው መልእክት ማዘጋጀት
         if lang == "am":
             msg = (
                 "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
@@ -590,11 +607,13 @@ async def approve_payment(callback: types.CallbackQuery):
             f"🎫 **የተሰጠ ቁጥር፦** `{ticket_number}`"
         )
         await callback.message.edit_caption(caption=new_caption, reply_markup=None, parse_mode="Markdown")
-        await callback.answer("✅ ትኬቱ ጸድቋል!")
+        await callback.answer("✅ ትኬቱ ጸድቋል እና ቁጥሩ ተመዝግቧል!")
 
     except Exception as e:
         print(f"Approve Error: {e}")
-        await callback.answer("❌ ስህተት፦ ዳታቤዝ ላይ ችግር አለ!")
+        await callback.answer("❌ ስህተት፦ ዳታቤዝ ላይ ችግር አጋጥሟል!")
+     
+
 
 # 3. Reject Handler
 @dp.callback_query(F.data.startswith("reject_"))
