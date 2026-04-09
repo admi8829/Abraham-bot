@@ -190,59 +190,48 @@ async def process_payment_info(callback: types.CallbackQuery):
 @dp.message(F.photo)
 async def handle_photos(message: types.Message):
     user_id = message.from_user.id
-    username = message.from_user.username or "N/A"
+    first_name = message.from_user.first_name or "N/A"
+    username = message.from_user.username
     photo_id = message.photo[-1].file_id
+
+    # Username-ን ለዲዛይን ማዘጋጀት
+    user_display = f"@{username}" if username else "No Username"
 
     # --- ሀ. ፎቶው የብሮድካስት ከሆነ (ከአድሚን የመጣና /broadcast የሚል ጽሁፍ ካለው) ---
     if str(user_id) == str(ADMIN_ID) and message.caption and message.caption.startswith("/broadcast"):
-        # ከጽሁፉ ላይ '/broadcast' የሚለውን ቃል ማስወገድ
         content = message.caption.replace("/broadcast", "").strip()
-        
-        # መልእክቱን፣ የሊንክ ስሙን እና URLውን መለየት (| ምልክትን በመጠቀም)
         parts = content.split("|")
         msg_text = parts[0].strip()
         btn_text = parts[1].strip() if len(parts) > 1 else None
         btn_url = parts[2].strip() if len(parts) > 2 else None
 
-        # ሊንክ ካለ Button ማዘጋጀት
         kb = None
         if btn_text and btn_url:
             builder = InlineKeyboardBuilder()
             builder.row(types.InlineKeyboardButton(text=btn_text, url=btn_url))
             kb = builder.as_markup()
 
-        # ሁሉንም ተጠቃሚዎች ከዳታቤዝ ማምጣት
         try:
             users_res = supabase.table("users").select("user_id").execute()
             user_list = users_res.data
+            await message.answer(f"⏳ ለ {len(user_list)} ሰዎች መላክ ተጀምሯል...")
+            
+            sent_count = 0
+            for user in user_list:
+                try:
+                    await bot.send_photo(chat_id=user['user_id'], photo=photo_id, caption=msg_text, reply_markup=kb, parse_mode="Markdown")
+                    sent_count += 1
+                    if sent_count % 25 == 0: await asyncio.sleep(1)
+                except: continue
+            await message.answer(f"✅ ብሮድካስት ተጠናቋል። ለ {sent_count} ሰዎች ተልኳል።")
         except Exception as e:
             await message.answer(f"❌ ስህተት፦ {e}")
-            return
-
-        sent_count = 0
-        await message.answer(f"⏳ ለ {len(user_list)} ሰዎች መላክ ተጀምሯል...")
-
-        for user in user_list:
-            try:
-                await bot.send_photo(
-                    chat_id=user['user_id'],
-                    photo=photo_id,
-                    caption=msg_text,
-                    reply_markup=kb,
-                    parse_mode="Markdown"
-                )
-                sent_count += 1
-                if sent_count % 25 == 0: await asyncio.sleep(1) # ቴሌግራም እንዳያግደን
-            except:
-                continue
-
-        await message.answer(f"✅ ብሮድካስት ተጠናቋል። ለ {sent_count} ሰዎች ተልኳል።")
-        return # ብሮድካስት ከሆነ እዚህ ጋር ይቆማል
+        return
 
     # --- ለ. የደረሰኝ ስክሪንሻት ከሆነ (ከተራ ተጠቃሚ የመጣ) ---
     else:
-        # 1. የተጠቃሚውን ቋንቋ እና ስልክ ከዳታቤዝ ማምጣት
         try:
+            # 1. የተጠቃሚውን ቋንቋ እና ስልክ ከዳታቤዝ ማምጣት
             res_user = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
             user_data = res_user.data[0] if res_user.data else {"lang": "am", "phone": "N/A"}
             lang = user_data.get('lang', 'am')
@@ -251,15 +240,16 @@ async def handle_photos(message: types.Message):
             # 2. ክፍያውን በዳታቤዝ መመዝገብ
             supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
 
-            # 3. ለአድሚን (ለአንተ) የሚላከው መልእክት ዲዛይን
+            # 3. ለአድሚን (ለአንተ) የሚላከው መልእክት ዲዛይን (በጣም ያመረ)
             admin_text = (
-                "🚀 **አዲስ የክፍያ ደረሰኝ ደርሷል!**\n\n"
-                "📊 **የላኪ መረጃ፦**\n"
-                f"👤 **ስም፦** @{username}\n"
-                f"🆔 **ID፦** `{user_id}`\n"
-                f"📞 **ስልክ፦** `{phone}`\n\n"
-                "🛠 **የአድሚን ስራ፦**\n"
-                "እባክዎ የባንክ ሂሳብዎን አረጋግጠው ትክክል ከሆነ ያጽድቁ።"
+                "📥 **[ አዲስ የክፍያ ደረሰኝ ]**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **ስም:** `{first_name}`\n"
+                f"🔗 **Username:** {user_display}\n"
+                f"🆔 **User ID:** `{user_id}`\n"
+                f"📞 **ስልክ:** `{phone}`\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "⚠️ **መመሪያ:** እባክዎ ክፍያውን በባንክ አካውንትዎ አረጋግጠው 'Approve' ወይም 'Reject' ያድርጉ።"
             )
 
             # 4. የአድሚን ኢንላይን በተኖች
@@ -279,15 +269,15 @@ async def handle_photos(message: types.Message):
 
             # 6. ለተጠቃሚው የሚላክ ማረጋገጫ (በቋንቋው)
             if lang == "am":
-                confirmation_text = "✅ **ደረሰኙ ለአስተዳዳሪው ተልኳል።**\nክፍያዎ ሲረጋገጥ የሎተሪ ቁጥርዎ ይላክልዎታል።"
+                confirmation_text = "✅ **ደረሰኙ ለአስተዳዳሪው ደርሷል።**\nክፍያዎ ተረጋግጦ ሲያልቅ የሎተሪ ቁጥርዎ ይላክልዎታል።"
             else:
-                confirmation_text = "✅ **Receipt sent to Admin!**\nYour lottery number will be sent once the payment is verified."
+                confirmation_text = "✅ **Receipt received by Admin!**\nYour lottery number will be sent after verification."
             
             await message.answer(confirmation_text, parse_mode="Markdown")
             
         except Exception as e:
             print(f"Error in handle_photos: {e}")
-        
+            
 
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
 async def my_info_handler(message: types.Message):
