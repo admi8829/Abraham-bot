@@ -89,27 +89,38 @@ async def start_handler(message: types.Message):
     
     # 2. በመቀጠል ዋናውን ሜኑ (Reply Buttons) መላክ
     await message.answer(menu_text, reply_markup=get_main_menu(user_lang))
-    
 
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message):
-    res = supabase.table("users").select("lang").eq("user_id", message.from_user.id).execute()
-    lang = res.data[0].get('lang', 'am') if res.data else 'am'
+    user_id = message.from_user.id
     
-    # የድሮው ሜኑ እንዲጠፋ እና ስልክ ቁጥር ብቻ እንዲመጣ
+    # 1. የተጠቃሚውን መረጃ ከዳታቤዝ ማምጣት
+    res = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
+    user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
+    lang = user_data.get('lang', 'am')
+    phone = user_data.get('phone')
+
+    # 2. ስልኩ ቀድሞ ካለ በቀጥታ ወደ ሽልማት ዝርዝር ማለፍ
+    if phone:
+        await show_prizes_and_pay(message, lang)
+        return
+
+    # 3. ስልኩ ከሌለ እንዲያጋራ መጠየቅ
     kb = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True)]
         ],
         resize_keyboard=True,
-        one_time_keyboard=True # ቁጥሩን ሲልክ በተኑ ይጠፋል
+        one_time_keyboard=True
     )
 
-    text = "🔐 **ደህንነት**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት።" if lang == "am" else "🔐 **Security**\n\nPlease share your contact first."
+    if lang == "am":
+        text = "🔐 **የደህንነት ማረጋገጫ**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
+    else:
+        text = "🔐 **Security Verification**\n\nPlease share your contact first to buy a ticket. This helps us call you if you win."
     
     await message.answer(text, reply_markup=kb, parse_mode="Markdown")
-    
-# ለ. ስልኩን ሲልክ ዳታቤዝ ውስጥ መመዝገብ እና የሽልማት መረጃ ማሳየት
+
 @dp.message(F.contact)
 async def handle_contact(message: types.Message):
     user_id = message.from_user.id
@@ -121,26 +132,44 @@ async def handle_contact(message: types.Message):
     res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
     lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
 
-    prizes_res = supabase.table("prizes").select("*").eq("lang", lang).execute()
-    prizes = prizes_res.data
-    prize_text = "\n".join([f"🏆 {p['rank']}: **{p['amount']}**" for p in prizes])
+    await message.answer("✅", reply_markup=get_main_menu(lang)) # ዋናው ሜኑ እንዲመለስ
+    await show_prizes_and_pay(message, lang)
 
-    inline_kb = InlineKeyboardBuilder()
-    pay_btn_text = "💳 ክፍያ ፈጽም (Pay Now)" if lang == "am" else "💳 Pay Now"
-    inline_kb.button(text=pay_btn_text, callback_data="show_payment")
+# ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
+async def show_prizes_and_pay(message: types.Message, lang: str):
+    try:
+        # ሽልማቶችን ከዳታቤዝ ማምጣት
+        prizes_res = supabase.table("prizes").select("*").eq("lang", lang).execute()
+        prizes = prizes_res.data
+        
+        prize_list = ""
+        for p in prizes:
+            prize_list += f"🏆 {p['rank']} እጣ: **{p['amount']}**\n" if lang == "am" else f"🏆 {p['rank']} Prize: **{p['amount']}**\n"
 
-    info_text = "✅ **ስልክዎ ተረጋግጧል!**\n\n" if lang == "am" else "✅ **Phone Verified!**\n\n"
-    info_text += f"{prize_text}\n\n🎫 **የአንድ ትኬት ዋጋ: 50 ብር**"
+        inline_kb = InlineKeyboardBuilder()
+        pay_btn_text = "💳 ክፍያ ፈጽም (Pay Now)" if lang == "am" else "💳 Pay Now"
+        inline_kb.button(text=pay_btn_text, callback_data="show_payment")
 
-    # እዚህ ጋር ነው 'reply_markup' የምንመልሰው
-    await message.answer(
-        info_text, 
-        reply_markup=get_main_menu(lang), # ዋናው ሜኑ እዚህ ጋር ይመለሳል
-        parse_mode="Markdown"
-    )
-    # የክፍያ በተኑን ለብቻው መላክ (Inline ስለሆነ ኪቦርዱን አይረብሽም)
-    await message.answer("ለመቀጠል የክፍያ ቁልፉን ይጫኑ፦", reply_markup=inline_kb.as_markup())
-    
+        if lang == "am":
+            info_text = (
+                "✨ **የእለቱ የሽልማት ዝርዝር** ✨\n\n"
+                f"{prize_list}\n"
+                "🎫 **የአንድ ትኬት ዋጋ: 50 ብር**\n\n"
+                "ለመቀጠል ከታች ያለውን የክፍያ ቁልፍ ይጫኑ፦"
+            )
+        else:
+            info_text = (
+                "✨ **Today's Prize List** ✨\n\n"
+                f"{prize_list}\n"
+                "🎫 **Ticket Price: 50 ETB**\n\n"
+                "Click the button below to proceed to payment:"
+            )
+
+        await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="Markdown")
+    except Exception as e:
+        print(f"Error showing prizes: {e}")
+        error_msg = "ስህተት ተከስቷል፣ እባክዎ በድጋሚ ይሞክሩ።" if lang == "am" else "An error occurred, please try again."
+        await message.answer(error_msg)
 
 # ሐ. የክፍያ መረጃ (Callback)
 @dp.callback_query(F.data == "show_payment")
