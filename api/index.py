@@ -589,80 +589,73 @@ async def enhanced_broadcast(message: types.Message):
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
     )
     
-
-
 @dp.message(Command("draw"))
 async def pick_winner(message: types.Message):
-    # አድሚን መሆንህን ያረጋግጣል
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    GROUP_CHAT_ID = "-1003878868241" 
+    CHANNEL_ID = "-1003878868241"
 
     try:
-        # 1. ክፍያቸው የተረጋገጠ ቲኬቶችን ማምጣት
+        # 1. 'approved' የሆኑ እና ገና ያልሸለሙ ትኬቶችን ብቻ ማምጣት
         res = supabase.table("tickets").select("*").eq("status", "approved").execute()
         tickets = res.data
 
-        if not tickets:
-            await message.answer("ምንም የተሸጠ ቲኬት የለም።")
+        if len(tickets) < 3:
+            await message.answer(f"⚠️ ይቅርታ፣ እጣ ለማውጣት ቢያንስ 3 ትኬቶች መሸጥ አለባቸው። (ያሉ ትኬቶች: {len(tickets)})")
             return
 
-        # 2. አሸናፊውን በዕድል መምረጥ
-        winner_ticket = random.choice(tickets)
-        winner_user_id = winner_ticket['user_id']
-        winner_number = winner_ticket['ticket_number']
+        # 2. ሶስት አሸናፊዎችን በዘፈቀደ መምረጥ (አንድ ሰው ሁለት ጊዜ እንዳይወጣ)
+        winners = random.sample(tickets, k=3)
+        ranks = ["1ኛ (🥇)", "2ኛ (🥈)", "3ኛ (🥉)"]
+        
+        full_announcement = "🎊 **የዛሬው የሎተሪ አሸናፊዎች ዝርዝር** 🎊\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        for i, winner_ticket in enumerate(winners):
+            rank_label = ranks[i]
+            w_user_id = winner_ticket['user_id']
+            w_num = winner_ticket['ticket_number']
+            
+            # የተጠቃሚውን ስም ከዳታቤዝ ማምጣት
+            u_res = supabase.table("users").select("username", "first_name").eq("user_id", w_user_id).execute()
+            u_data = u_res.data[0] if u_res.data else {}
+            display_name = u_data.get('first_name', 'ተሳታፊ')
+            u_name = f"@{u_data.get('username')}" if u_data.get('username') else display_name
 
-        # 3. የአሸናፊውን ስም ማግኘት
-        user_res = supabase.table("users").select("username").eq("user_id", winner_user_id).execute()
-        winner_name = user_res.data[0]['username'] if user_res.data else "ተጠቃሚ"
-
-        # --- አዲሱ ክፍል፡ ወደ Winners Table መመዝገብ እና የቲኬቱን Status መቀየር ---
-        try:
-            # ወደ winners table መመዝገብ
+            # 3. በዳታቤዝ አሸናፊነታቸውን መመዝገብ
             supabase.table("winners").insert({
-                "user_id": winner_user_id,
-                "ticket_number": winner_number
+                "user_id": w_user_id,
+                "ticket_number": w_num,
+                "rank": rank_label
             }).execute()
             
-            # በ tickets table ውስጥ የቲኬቱን ሁኔታ ወደ 'winner' መቀየር
-            supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", winner_number).execute()
-        except Exception as db_err:
-            print(f"Database recording error: {db_err}")
-        # ------------------------------------------------------------
+            # ቲኬቱ በድጋሚ እጣ ውስጥ እንዳይገባ 'used_winner' ማድረግ
+            supabase.table("tickets").update({"status": "used_winner"}).eq("ticket_number", w_num).execute()
 
-        # --- መልእክቶቹን ማዘጋጀት ---
-        public_text = (
-            "🎉 **እንኳን ደስ አላችሁ! የዛሬው አሸናፊ ተለይቷል!** 🎉\n\n"
-            f"👤 አሸናፊ፦ @{winner_name}\n"
-            f"🎫 የቲኬት ቁጥር፦ {winner_number}\n\n"
-            "ቀጣዩ አሸናፊ እርስዎ ይሁኑ! አሁኑኑ ትኬት ይቁረጡ።"
-        )
-        
-        private_text = (
-            "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
-            f"በቆረጡት የሎተሪ ቲኬት ቁጥር **{winner_number}** አሸናፊ ሆነዋል። "
-            "እባክዎ ሽልማትዎን ለመቀበል አስተዳዳሪውን ያነጋግሩ።"
-        )
+            # 4. ለአሸናፊው በግል (Inbox) መላክ
+            private_text = (
+                f"🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
+                f"በቆረጡት የሎተሪ ቁጥር **{w_num}** የ**{rank_label}** አሸናፊ ሆነዋል።\n"
+                "እባክዎ ሽልማትዎን ለመቀበል አድሚኑን `@your_admin` ያነጋግሩ።"
+            )
+            try:
+                await bot.send_message(w_user_id, private_text, parse_mode="Markdown")
+            except:
+                print(f"User {w_user_id} blocked the bot.")
 
-        # 4. ለአሸናፊው በግል (Inbox) መላክ
-        try:
-            await bot.send_message(winner_user_id, private_text)
-        except Exception as e:
-            print(f"ለአሸናፊው መላክ አልተቻለም: {e}")
+            # ለቻናል መልእክት ማዘጋጀት
+            full_announcement += f"{rank_label} አሸናፊ፦ {u_name}\n🎫 የእጣ ቁጥር፦ `{w_num}`\n\n"
 
-        # 5. ወደ ቴሌግራም ግሩፕ/ቻናል መላክ
-        try:
-            await bot.send_message(GROUP_CHAT_ID, public_text)
-        except Exception as e:
-            print(f"ወደ ግሩፕ መላክ አልተቻለም: {e}")
+        full_announcement += "━━━━━━━━━━━━━━━━━━━━\n🎉 እንኳን ደስ አላችሁ! ለተሳተፋችሁ ሁሉ እናመሰግናለን።"
 
-        # 6. ለአድሚኑ ማረጋገጫ መስጠት
-        await message.answer(f"✅ አሸናፊው ተለይቷል፦ @{winner_name}\nመረጃው በዳታቤዝ ተመዝግቧል።")
+        # 5. ወደ ቻናል መላክ
+        await bot.send_message(chat_id=CHANNEL_ID, text=full_announcement, parse_mode="Markdown")
+        await message.answer("✅ የሶስቱም አሸናፊዎች እጣ ወጥቶ በቻናል ተለጥፏል።")
 
     except Exception as e:
-        print(f"Error: {e}")
-        await message.answer("ስህተት ተከስቷል።")
+        print(f"Draw Error: {e}")
+        await message.answer("❌ እጣ ሲወጣ ስህተት ተከስቷል።")
+            
     
 # --- Webhook ---
 @app.on_event("startup")
