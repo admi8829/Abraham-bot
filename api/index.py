@@ -57,39 +57,82 @@ def get_start_inline():
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or "User"
+    CHANNEL_ID = -1003866954136  # ያንተ የቻናል ID
     
+    # --- 1. የቻናል ግዴታ (Member Check) ---
     try:
-        # የተጠቃሚውን ቋንቋ መፈተሽ
+        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        if member.status in ["left", "kicked"]:
+            # ቻናሉን ካልተቀላቀለ የሚመጣ መልእክት
+            kb = InlineKeyboardBuilder()
+            kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/your_channel_link")) # የቻናልህን ሊንክ እዚህ ቀይረው
+            kb.row(types.InlineKeyboardButton(text="🔄 ተቀላቅያለሁ / I joined", callback_data="check_join"))
+            
+            join_text = (
+                "⚠️ **ይቅርታ!**\n\nቦቱን ለመጠቀም መጀመሪያ የቴሌግራም ቻናላችንን መቀላቀል አለብዎት። "
+                "ይህም አሸናፊዎችን እና አዳዲስ መረጃዎችን በፍጥነት ለማግኘት ይረዳዎታል።"
+            )
+            await message.answer(join_text, reply_markup=kb.as_markup())
+            return
+    except Exception as e:
+        print(f"Join check error: {e}")
+
+    # --- 2. የግብዣ (Referral) ሲስተም ---
+    args = message.text.split()
+    referrer_id = None
+    if len(args) > 1 and args[1].isdigit():
+        referrer_id = int(args[1])
+        if referrer_id == user_id: referrer_id = None
+
+    # --- 3. ዳታቤዝ ውስጥ መመዝገብ ---
+    try:
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         
         if not res.data:
-            # አዲስ ተጠቃሚ ከሆነ መመዝገብ
             user_lang = 'am'
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username, 
-                "lang": 'am'
+                "lang": 'am',
+                "referred_by": referrer_id # ጋባዡ እዚህ ይመዘገባል
             }).execute()
+            
+            # ለጋባዡ መረጃ እንዲደርሰው (ከተፈለገ)
+            if referrer_id:
+                try: await bot.send_message(referrer_id, "🎉 አዲስ ሰው በእርስዎ ሊንክ ቦቱን ተቀላቅሏል!")
+                except: pass
         else:
             user_lang = res.data[0].get('lang', 'am')
     except Exception as e:
-        print(f"Database error: {e}")
+        print(f"DB Error: {e}")
         user_lang = 'am'
 
-    # መልእክቱን ማዘጋጀት (ያለ GIF)
+    # --- 4. የዲዛይን ስራ (Welcome Message) ---
     if user_lang == "am":
-        text = "👋 **እንኳን ደህና መጡ!**\n\nለመጀመር '➕ አዲስ ትኬት ቁረጥ' የሚለውን ቁልፍ ይጫኑ።"
-        menu_text = "ምርጫዎን ይምረጡ፦"
+        welcome_text = (
+            f"👋 **ሰላም {message.from_user.first_name}!**\n"
+            "ወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n"
+            "🎯 **እድለኛ ይሁኑ!** አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ።"
+        )
+        menu_msg = "🎛 ከታች ካሉት አማራጮች አንዱን ይምረጡ፦"
     else:
-        text = "👋 **Welcome!**\n\nClick '➕ Buy New Ticket' to start."
-        menu_text = "Choose an option:"
+        welcome_text = (
+            f"👋 **Hello {message.from_user.first_name}!**\n"
+            "Welcome to our Lottery Ticket Bot.\n\n"
+            "🎯 **Good Luck!** Buy a ticket now and stand a chance to win big."
+        )
+        menu_msg = "🎛 Please choose an option from below:"
 
-    # 1. መጀመሪያ ኢንላይን በተኑን (Website/YouTube) መላክ
-    await message.answer(text, reply_markup=get_start_inline(), parse_mode="Markdown")
+    await message.answer(welcome_text, reply_markup=get_start_inline(), parse_mode="Markdown")
+    await message.answer(menu_msg, reply_markup=get_main_menu(user_lang))
+
+# --- 5. የ 'Check Join' በተን ሲነካ ---
+@dp.callback_query(F.data == "check_join")
+async def check_join_callback(callback: types.CallbackQuery):
+    await callback.message.delete()
+    await start_handler(callback.message) # ድጋሚ Start-ን እንዲያሄድ
+    await callback.answer()
     
-    # 2. በመቀጠል ዋናውን ሜኑ (Reply Buttons) መላክ
-    await message.answer(menu_text, reply_markup=get_main_menu(user_lang))
-
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message):
     user_id = message.from_user.id
