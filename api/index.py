@@ -7,15 +7,24 @@ from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from supabase import create_client, Client
-
+ 
 # 1. Environment Variables
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-BASE_URL = os.getenv("WEBHOOK_URL") 
-ADMIN_ID = os.getenv("ADMIN_ID") 
-# ከ Vercel Environment የሚመጣ የቻናል ID
-CHANNEL_ID = os.getenv("CHANNEL_ID") 
+BASE_URL = os.getenv("WEBHOOK_URL")
+
+# ID-ዎቹን ወደ Integer (ቁጥር) መቀየር ግዴታ ነው
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+    # CHANNEL_ID-ን ስትቀይር ስህተት እንዳይፈጠር እንዲህ አድርገው
+    raw_channel_id = os.getenv("CHANNEL_ID", "0")
+    CHANNEL_ID = int(raw_channel_id)
+except (ValueError, TypeError):
+    print("❌ ስህተት፦ ADMIN_ID ወይም CHANNEL_ID በቁጥር አልተገቡም!")
+    ADMIN_ID = 0
+    CHANNEL_ID = 0
+    
 # 2. Initialization
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
