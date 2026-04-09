@@ -419,6 +419,58 @@ async def invite_friends_handler(message: types.Message):
     kb.row(types.InlineKeyboardButton(text=btn_msg, url=share_url))
     
     await message.answer(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
+
+@dp.message(F.text.in_({"💡 እገዛ", "💡 Help"}))
+async def help_handler(message: types.Message):
+    user_id = message.from_user.id
+    
+    # የቋንቋ ምርጫን ማወቅ
+    try:
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = res.data[0].get('lang', 'am') if res.data else 'am'
+    except:
+        lang = 'am'
+
+    if lang == "am":
+        help_text = (
+            "❓ **እንዴት መሳተፍ እችላለሁ?**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "1️⃣ **ትኬት ለመቁረጥ፦**\n"
+            "  '➕ አዲስ ትኬት ቁረጥ' የሚለውን ይጫኑ። ስልክዎን ካጋሩ በኋላ ክፍያ ይፈጽሙና ደረሰኝ ይላኩ።\n\n"
+            "2️⃣ **ክፍያ ለማጽደቅ፦**\n"
+            "  የባንክ ደረሰኝዎን (Screenshot) ሲልኩ አድሚኑ ያረጋግጥና የሎተሪ ቁጥርዎን ይልክልዎታል።\n\n"
+            "3️⃣ **ጓደኛ ለመጋበዝ፦**\n"
+            "  '👥 ጓደኛ ጋብዝ' የሚለውን ተጠቅመው የራስዎን ሊንክ ለሰዎች ይላኩ።\n\n"
+            "4️⃣ **አሸናፊዎችን ለማየት፦**\n"
+            "  '🎁 አሸናፊዎች' የሚለው ውስጥ የእለቱን እድለኞች ማግኘት ይችላሉ።\n\n"
+            "📞 **ተጨማሪ ጥያቄ ካለዎት፦**\n"
+            "  የቴሌግራም አድራሻችን፦ @your_admin_username\n"
+            "━━━━━━━━━━━━━━━━━━━━"
+        )
+        btn_text = "📞 አስተዳዳሪውን አነጋግር"
+    else:
+        help_text = (
+            "❓ **How can I participate?**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "1️⃣ **To Buy a Ticket:**\n"
+            "  Click '➕ Buy New Ticket'. Share your phone, pay the amount, and send the receipt.\n\n"
+            "2️⃣ **Approval Process:**\n"
+            "  Once you send the screenshot, the admin will verify it and send your lottery number.\n\n"
+            "3️⃣ **Inviting Friends:**\n"
+            "  Use '👥 Invite Friends' to get your link and invite others to win.\n\n"
+            "4️⃣ **Winners List:**\n"
+            "  Check '🎁 Winners' to see the daily lucky winners.\n\n"
+            "📞 **Need More Help?**\n"
+            "  Contact us: @your_admin_username\n"
+            "━━━━━━━━━━━━━━━━━━━━"
+        )
+        btn_text = "📞 Contact Admin"
+
+    # የውስጥ በተን (Support Link)
+    kb = InlineKeyboardBuilder()
+    kb.row(types.InlineKeyboardButton(text=btn_text, url="https://t.me/your_admin_username"))
+    
+    await message.answer(help_text, reply_markup=kb.as_markup(), parse_mode="Markdown")
         
 
 # 3. አድሚኑ ሲያጸድቅ
