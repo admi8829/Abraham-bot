@@ -221,7 +221,14 @@ async def handle_photos(message: types.Message):
             caption=f"አዲስ የክፍያ ጥያቄ ከ፦ @{username}\nUser ID: {user_id}",
             reply_markup=admin_kb.as_markup()
         )
-        await message.answer("ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክለታል።")
+                # የቋንቋ ምርጫውን ከላይ ካለው 'lang' ተለዋዋጭ በመጠቀም
+        if lang == "am":
+            confirmation_text = "✅ ደረሰኙ ተልኳል። አስተዳዳሪው ሲያረጋግጥ የሎተሪ ቁጥር ይላክልዎታል።"
+        else:
+            confirmation_text = "✅ Receipt sent! You will receive your lottery number once the admin verifies it."
+            
+        await message.answer(confirmation_text)
+        
         
     
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
