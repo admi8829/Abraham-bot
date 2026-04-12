@@ -424,15 +424,62 @@ async def invite_friends_handler(message: types.Message):
 # 3. አድሚኑ ሲያጸድቅ
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_payment(callback: types.CallbackQuery):
-    target_id = int(callback.data.split("_")[1])
-    ticket_no = f"LOT-{random.randint(10000, 99999)}"
-    
-    supabase.table("tickets").insert({"user_id": target_id, "ticket_number": ticket_no, "status": "approved"}).execute()
-    
-    await bot.send_message(target_id, f"🎉 ክፍያዎ ጸድቋል! የሎተሪ ቁጥርዎ: {ticket_no}")
-    await callback.message.edit_caption(caption=f"✅ ጸድቋል! ቁጥር: {ticket_no}")
-    await callback.answer("Approved!")
+    # አድሚን መሆኑን ማረጋገጥ
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        await callback.answer("ያልተፈቀደ ሙከራ!", show_alert=True)
+        return
 
+    target_id = int(callback.data.split("_")[1])
+    
+    try:
+        # 1. መጀመሪያ ተጠቃሚው ቀድሞ ትኬት ተቆርጦለት እንደሆነ ቼክ ማድረግ (ለጥንቃቄ)
+        # ይህ አድሚኑ በተኑን ሁለት ጊዜ ቢጫነው እንዳይደገም ይረዳል
+        check_res = supabase.table("tickets").select("*").eq("user_id", target_id).eq("status", "approved").execute()
+        
+        # 2. ልዩ (Unique) የትኬት ቁጥር በ While Loop መፍጠር
+        ticket_no = ""
+        while True:
+            # 6 ዲጂት ያለው ቁጥር በመጠቀም የመሳሳት እድሉን መቀነስ
+            random_num = random.randint(100000, 999999)
+            ticket_no = f"LOT-{random_num}"
+            
+            # ይህ ቁጥር ዳታቤዝ ውስጥ መኖሩን ማረጋገጥ
+            dup_check = supabase.table("tickets").select("ticket_number").eq("ticket_number", ticket_no).execute()
+            
+            if not dup_check.data: # ቁጥሩ ዳታቤዝ ውስጥ ከሌለ Loop-ን አቁም
+                break
+        
+        # 3. ትኬቱን በዳታቤዝ ውስጥ መመዝገብ
+        supabase.table("tickets").insert({
+            "user_id": target_id, 
+            "ticket_number": ticket_no, 
+            "status": "approved"
+        }).execute()
+        
+        # 4. ለተጠቃሚው በ Inbox ማሳወቅ
+        success_msg = (
+            "🎊 **እንኳን ደስ አለዎት!**\n\n"
+            "የላኩት የክፍያ ደረሰኝ ተረጋግጧል።\n"
+            f"🎫 የሎተሪ ቁጥርዎ፦ `{ticket_no}`\n\n"
+            "እጣው ሲወጣ በቦቱ እና በቻናላችን እናሳውቃለን። መልካም እድል!"
+        )
+        
+        try:
+            await bot.send_message(target_id, success_msg, parse_mode="Markdown")
+        except Exception as e:
+            print(f"ለተጠቃሚው መልእክት መላክ አልተቻለም (User blocked bot): {e}")
+
+        # 5. ለአድሚኑ በተኑን ወደ "ጸድቋል" መቀየር
+        await callback.message.edit_caption(
+            caption=f"{callback.message.caption}\n\n✅ **ጸድቋል!**\nቁጥር፦ `{ticket_no}`",
+            reply_markup=None # በተኖቹን ያጠፋቸዋል
+        )
+        await callback.answer("ክፍያው ጸድቋል!")
+
+    except Exception as e:
+        print(f"Approve Error: {e}")
+        await callback.answer(f"ስህተት ተከስቷል፦ {e}", show_alert=True)
+        
 # 4. አድሚኑ ውድቅ ሲያደርግ
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_payment(callback: types.CallbackQuery):
