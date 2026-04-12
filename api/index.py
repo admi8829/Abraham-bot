@@ -488,87 +488,69 @@ async def handle_language_choice(callback: types.CallbackQuery):
     await callback.message.edit_text(msg)
     await callback.message.answer(msg, reply_markup=get_main_menu(lang))
 
+# 1. አድሚኑ ብሮድካስት እንዲጀምር ትዕዛዝ መስጫ
 @dp.message(Command("broadcast"))
-async def enhanced_broadcast(message: types.Message):
-    # 1. አድሚን መሆንህን ያረጋግጣል
-    if str(message.from_user.id) != str(ADMIN_ID):
-        return
-
-    # መመሪያ ለአድሚኑ፡ ፎቶ ከሆነ ከፎቶው ስር ጽሁፍ ይጻፋል፣ ጽሁፍ ብቻ ከሆነ ደግሞ በኮማንድ ይላካል
-    # አጠቃቀም፡ /broadcast ጽሁፍ | ሊንክ_ስም | ሊንክ_URL
+async def cmd_broadcast(message: types.Message, state: FSMContext):
+    if str(message.from_user.id) != str(ADMIN_ID): return
     
-    content = message.caption if message.photo else message.text.replace("/broadcast", "").strip()
+    await state.set_state(LotteryStates.waiting_for_broadcast_msg)
+    await message.answer("📣 ለመላክ የሚፈልጉትን መልእክት ይላኩ (ጽሁፍ ወይም ፎቶ ከነcaption ሊሆን ይችላል)፦\n\nለማቆም /cancel ይበሉ።")
+
+# 2. መልእክቱን ተቀብሎ በከፊል (Pagination) መላኪያ
+@dp.message(LotteryStates.waiting_for_broadcast_msg)
+async def process_broadcast_step(message: types.Message, state: FSMContext):
+    if str(message.from_user.id) != str(ADMIN_ID): return
     
-    if not content:
-        await message.answer(
-            "⚠️ **እንዴት እንደሚጠቀሙ፦**\n\n"
-            "**ለጽሁፍ ብቻ፦** `/broadcast መልእክት | ሊንክ ስም | https://link.com` \n"
-            "**ለፎቶ፦** ፎቶውን ይላኩና ከስሩ መልእክቱን በተመሳሳይ ቅርጽ ይጻፉ።",
-            parse_mode="Markdown"
-        )
-        return
+    # ሁሉንም ተጠቃሚዎች ማምጣት
+    users_data = supabase.table("users").select("user_id").execute()
+    users = users_data.data
+    
+    await message.answer(f"⏳ ለ {len(users)} ተጠቃሚዎች መላክ ተጀምሯል...")
 
-    # መልእክቱን፣ የሊንክ ስሙን እና URLውን መለየት (| ምልክትን በመጠቀም)
-    parts = content.split("|")
-    msg_text = parts[0].strip()
-    btn_text = parts[1].strip() if len(parts) > 1 else None
-    btn_url = parts[2].strip() if len(parts) > 2 else None
+    success = 0
+    fail = 0
+    
+    # ለ Vercel Timeout ጥንቃቄ፡ እዚህ ጋር ለሙከራ የመጀመሪያዎቹን 50 ሰው ብቻ እንውሰድ
+    # ብዙ ሰው ካለህ በከፊል መላክ (Pagination) መጠቀም አለብህ
+    target_users = users[:50] 
 
-    # አዝራር (Button) ካለ ማዘጋጀት
-    kb = None
-    if btn_text and btn_url:
-        builder = InlineKeyboardBuilder()
-        builder.row(types.InlineKeyboardButton(text=btn_text, url=btn_url))
-        kb = builder.as_markup()
-
-    # 2. ሁሉንም ተጠቃሚዎች ማምጣት
-    try:
-        res = supabase.table("users").select("user_id").execute()
-        user_list = res.data
-    except Exception as e:
-        await message.answer(f"❌ ስህተት፦ {e}")
-        return
-
-    sent_count = 0
-    blocked_count = 0
-    status_msg = await message.answer(f"⏳ ለ {len(user_list)} ሰዎች መላክ ተጀምሯል...")
-
-    # 3. መላክ መጀመር
-    for user in user_list:
+    for user in target_users:
         try:
+            # መልእክቱ ፎቶ ከሆነ
             if message.photo:
-                # ፎቶ ካለ በፎቶ ይልካል
                 await bot.send_photo(
                     chat_id=user['user_id'],
                     photo=message.photo[-1].file_id,
-                    caption=msg_text,
-                    reply_markup=kb,
-                    parse_mode="Markdown"
+                    caption=html.escape(message.caption) if message.caption else None,
+                    parse_mode="HTML"
                 )
-            else:
-                # ጽሁፍ ብቻ ከሆነ
+            # መልእክቱ ጽሁፍ ብቻ ከሆነ
+            elif message.text:
                 await bot.send_message(
                     chat_id=user['user_id'],
-                    text=msg_text,
-                    reply_markup=kb,
-                    parse_mode="Markdown"
+                    text=html.escape(message.text),
+                    parse_mode="HTML"
                 )
-            
-            sent_count += 1
-            if sent_count % 25 == 0:
-                await asyncio.sleep(1) # ፍጥነት መገደቢያ
-
+            success += 1
+            await asyncio.sleep(0.05) # Flood Control
         except Exception:
-            blocked_count += 1
+            fail += 1
 
-    await status_msg.edit_text(
-        f"✅ **ብሮድካስት ተጠናቋል!**\n\n"
-        f"📤 የተላከላቸው፦ {sent_count}\n"
-        f"🚫 የዘጉ (Blocked)፦ {blocked_count}\n"
-        f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
+    await state.clear()
+    report = (
+        "📊 <b>የብሮድካስት ሪፖርት</b>\n\n"
+        f"✅ በስኬት ተልኳል፦ {success}\n"
+        f"❌ ያልተላከላቸው፦ {fail}\n"
+        "💡 <i>ማሳሰቢያ፦ Vercel ላይ ስለሆኑ ለደህንነት ሲባል ለ 50 ሰው ብቻ ተልኳል።</i>"
     )
-    
+    await message.answer(report, parse_mode="HTML")
 
+# ብሮድካስት ለማቆም
+@dp.message(Command("cancel"), LotteryStates.waiting_for_broadcast_msg)
+async def cancel_broadcast(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer("❌ ብሮድካስት ተሰርዟል።")
+    
 
 @dp.message(Command("draw"))
 async def pick_winner(message: types.Message):
