@@ -26,9 +26,9 @@ app = FastAPI()
 
 # --- የሎተሪ ሂደቱን በደረጃ ለመቆጣጠር (FSM States) ---
 class LotteryStates(StatesGroup):
-    waiting_for_phone = State()    # ስልክ እስኪላክ
-    waiting_for_receipt = State()  # ደረሰኝ እስኪላክ
-    
+    waiting_for_phone = State()
+    waiting_for_receipt = State()
+    waiting_for_broadcast_msg = State() # አዲስ የተጨመረ - ብሮድካስት መልእክት ለመቀበል
 
 # Webhook paths
 WEBHOOK_PATH = f"/bot/{TOKEN}"
