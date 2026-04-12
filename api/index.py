@@ -28,7 +28,10 @@ app = FastAPI()
 class LotteryStates(StatesGroup):
     waiting_for_phone = State()
     waiting_for_receipt = State()
-    waiting_for_broadcast_msg = State() # አዲስ የተጨመረ - ብሮድካስት መልእክት ለመቀበል
+    waiting_for_broadcast_msg = State() # አዲስ የተጨመረ - ብሮድካስት መልእክት ለመቀበ
+    waiting_for_broadcast_content = State()
+    waiting_for_broadcast_range = State()
+    
 
 # Webhook paths
 WEBHOOK_PATH = f"/bot/{TOKEN}"
