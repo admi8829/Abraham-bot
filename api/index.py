@@ -231,95 +231,70 @@ async def process_payment_info(callback: types.CallbackQuery):
 
 # 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
 @dp.message(F.photo)
-async def handle_photos(message: types.Message):
+async def handle_receipt(message: types.Message):
     user_id = message.from_user.id
-    first_name = message.from_user.first_name or "N/A"
-    username = message.from_user.username
-    photo_id = message.photo[-1].file_id
-
-    # Username-ን ለዲዛይን ማዘጋጀት
-    user_display = f"@{username}" if username else "No Username"
-
-    # --- ሀ. ፎቶው የብሮድካስት ከሆነ (ከአድሚን የመጣና /broadcast የሚል ጽሁፍ ካለው) ---
-    if str(user_id) == str(ADMIN_ID) and message.caption and message.caption.startswith("/broadcast"):
-        content = message.caption.replace("/broadcast", "").strip()
-        parts = content.split("|")
-        msg_text = parts[0].strip()
-        btn_text = parts[1].strip() if len(parts) > 1 else None
-        btn_url = parts[2].strip() if len(parts) > 2 else None
-
-        kb = None
-        if btn_text and btn_url:
-            builder = InlineKeyboardBuilder()
-            builder.row(types.InlineKeyboardButton(text=btn_text, url=btn_url))
-            kb = builder.as_markup()
-
-        try:
-            users_res = supabase.table("users").select("user_id").execute()
-            user_list = users_res.data
-            await message.answer(f"⏳ ለ {len(user_list)} ሰዎች መላክ ተጀምሯል...")
-            
-            sent_count = 0
-            for user in user_list:
-                try:
-                    await bot.send_photo(chat_id=user['user_id'], photo=photo_id, caption=msg_text, reply_markup=kb, parse_mode="Markdown")
-                    sent_count += 1
-                    if sent_count % 25 == 0: await asyncio.sleep(1)
-                except: continue
-            await message.answer(f"✅ ብሮድካስት ተጠናቋል። ለ {sent_count} ሰዎች ተልኳል።")
-        except Exception as e:
-            await message.answer(f"❌ ስህተት፦ {e}")
+    
+    # 1. መጀመሪያ ተጠቃሚው በትክክል ክፍያ እንዲልክ ተጠይቆ እንደሆነ ቼክ እናደርጋለን
+    # በዳታቤዝ ውስጥ የተጠቃሚውን ቋንቋ ወይም ሁኔታ የምናይበትን ሰንጠረዥ እንጠቀማለን
+    user_data = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    
+    if not user_data.data:
+        # ተጠቃሚው ገና /start ካላላ አይፈቀድለትም
         return
 
-    # --- ለ. የደረሰኝ ስክሪንሻት ከሆነ (ከተራ ተጠቃሚ የመጣ) ---
-    else:
-        try:
-            # 1. የተጠቃሚውን ቋንቋ እና ስልክ ከዳታቤዝ ማምጣት
-            res_user = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
-            user_data = res_user.data[0] if res_user.data else {"lang": "am", "phone": "N/A"}
-            lang = user_data.get('lang', 'am')
-            phone = user_data.get('phone', 'N/A')
+    # 2. የፎቶውን Unique ID መውሰድ (ለማጭበርበር መከላከያ)
+    photo_unique_id = message.photo[-1].file_unique_id
+    photo_id = message.photo[-1].file_id
 
-            # 2. ክፍያውን በዳታቤዝ መመዝገብ
-            supabase.table("payments").insert({"user_id": user_id, "file_id": photo_id}).execute()
+    # 3. ፎቶው ቀድሞ ጥቅም ላይ መዋሉን ቼክ ማድረግ
+    dup_check = supabase.table("payments").select("file_id").eq("file_id", photo_unique_id).execute()
+    if dup_check.data:
+        await message.reply("⚠️ ይህ ደረሰኝ ቀድሞ ጥቅም ላይ ውሏል! እባክዎ ትክክለኛ ደረሰኝ ይላኩ።")
+        return
 
-            # 3. ለአድሚን (ለአንተ) የሚላከው መልእክት ዲዛይን (በጣም ያመረ)
-            admin_text = (
-                "📥 **[ አዲስ የክፍያ ደረሰኝ ]**\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 **ስም:** `{first_name}`\n"
-                f"🔗 **Username:** {user_display}\n"
-                f"🆔 **User ID:** `{user_id}`\n"
-                f"📞 **ስልክ:** `{phone}`\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "⚠️ **መመሪያ:** እባክዎ ክፍያውን በባንክ አካውንትዎ አረጋግጠው 'Approve' ወይም 'Reject' ያድርጉ።"
-            )
+    # 4. Username አቀራረብን ማስተካከል
+    # username ካለው @ ጨምሮ ያመጣል፣ ከሌለው 'ስም የለውም' ይላል
+    user_handle = f"@{message.from_user.username}" if message.from_user.username else "ስም የለውም (No Username)"
+    full_name = message.from_user.full_name
 
-            # 4. የአድሚን ኢንላይን በተኖች
-            admin_kb = InlineKeyboardBuilder()
-            admin_kb.add(types.InlineKeyboardButton(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}"))
-            admin_kb.add(types.InlineKeyboardButton(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}"))
-            admin_kb.adjust(2)
+    # 5. ለ Admin መላክ
+    admin_caption = (
+        "📩 **አዲስ የክፍያ ደረሰኝ ደርሷል**\n\n"
+        f"👤 **ስም፦** {full_name}\n"
+        f"🆔 **ዩዘር ስም፦** {user_handle}\n"
+        f"🔢 **User ID፦** `{user_id}`\n"
+        "--------------------------\n"
+        "እባክዎ ባንክዎን አረጋግጠው ያጽድቁ።"
+    )
 
-            # 5. ለአድሚኑ መላክ
-            await bot.send_photo(
-                chat_id=int(ADMIN_ID),
-                photo=photo_id,
-                caption=admin_text,
-                reply_markup=admin_kb.as_markup(),
-                parse_mode="Markdown"
-            )
+    # አጽድቅ እና ሰርዝ በተኖችን ማዘጋጀት
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ አጽድቅ (Approve)", callback_data=f"approve_{user_id}")
+    builder.button(text="❌ ሰርዝ (Reject)", callback_data=f"reject_{user_id}")
+    builder.adjust(2)
 
-            # 6. ለተጠቃሚው የሚላክ ማረጋገጫ (በቋንቋው)
-            if lang == "am":
-                confirmation_text = "✅ **ደረሰኙ ለአስተዳዳሪው ደርሷል።**\nክፍያዎ ተረጋግጦ ሲያልቅ የሎተሪ ቁጥርዎ ይላክልዎታል።"
-            else:
-                confirmation_text = "✅ **Receipt received by Admin!**\nYour lottery number will be sent after verification."
-            
-            await message.answer(confirmation_text, parse_mode="Markdown")
-            
-        except Exception as e:
-            print(f"Error in handle_photos: {e}")
+    try:
+        # ለ Admin መላክ
+        await bot.send_photo(
+            ADMIN_ID,
+            photo_id,
+            caption=admin_caption,
+            reply_markup=builder.as_markup(),
+            parse_mode="Markdown"
+        )
+        
+        # የክፍያ ሙከራውን መመዝገብ
+        supabase.table("payments").insert({
+            "user_id": user_id,
+            "file_id": photo_unique_id
+        }).execute()
+
+        await message.reply("✅ ደረሰኝዎ ለአስተዳዳሪው ተልኳል። ሲረጋገጥ የትኬት ቁጥር ይላክልዎታል።")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        await message.reply("ስህተት ተከስቷል። እባክዎ ቆይተው ይሞክሩ።")
+        
             
 
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
