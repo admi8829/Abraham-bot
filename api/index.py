@@ -1,14 +1,17 @@
 import os
 import asyncio
 import random
+import html  # ልዩ ምልክቶችን (እንደ & እና _) ለመቆጣጠር
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
+from aiogram.fsm.state import State, StatesGroup # ለደረጃዎች
+from aiogram.fsm.context import FSMContext        # ለደረጃዎች
 from supabase import create_client, Client
 
-# 1. Environment Variables
+# 1. Environment Variables (ያሉበት ይቀጥላሉ)
 TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -17,9 +20,15 @@ ADMIN_ID = os.getenv("ADMIN_ID")
 
 # 2. Initialization
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+dp = Dispatcher() # FSM አብሮት ይሰራል
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 app = FastAPI()
+
+# --- የሎተሪ ሂደቱን በደረጃ ለመቆጣጠር (FSM States) ---
+class LotteryStates(StatesGroup):
+    waiting_for_phone = State()    # ስልክ እስኪላክ
+    waiting_for_receipt = State()  # ደረሰኝ እስኪላክ
+    
 
 # Webhook paths
 WEBHOOK_PATH = f"/bot/{TOKEN}"
