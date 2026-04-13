@@ -101,11 +101,11 @@ async def start_handler(message: types.Message):
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         
         if not res.data:
-            user_lang = 'am'
+            user_lang = 'en'
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username, 
-                "lang": 'am',
+                "lang": 'en',
                 "referred_by": referrer_id # ጋባዡ እዚህ ይመዘገባል
             }).execute()
             
@@ -117,10 +117,10 @@ async def start_handler(message: types.Message):
             user_lang = res.data[0].get('lang', 'am')
     except Exception as e:
         print(f"DB Error: {e}")
-        user_lang = 'am'
+        user_lang = 'en'
 
     # --- 4. የዲዛይን ስራ (Welcome Message) ---
-    if user_lang == "am":
+    if user_lang == "en":
         welcome_text = (
             f"👋 **ሰላም {message.from_user.first_name}!**\n"
             "ወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n"
