@@ -149,13 +149,19 @@ async def check_join_callback(callback: types.CallbackQuery):
     else:
         await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም!", show_alert=True)
 
+# 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
-async def buy_ticket_step1(message: types.Message):
+async def buy_ticket_step1(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
-    # 1. የተጠቃሚውን መረጃ ከዳታቤዝ ማምጣት
-    res = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
-    user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
+    # የተጠቃሚውን መረጃ ከዳታቤዝ ማምጣት
+    try:
+        res = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
+        user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
+    except Exception as e:
+        print(f"DB Error: {e}")
+        user_data = {"lang": "am", "phone": None}
+
     lang = user_data.get('lang', 'am')
     phone = user_data.get('phone')
 
@@ -164,35 +170,48 @@ async def buy_ticket_step1(message: types.Message):
         await show_prizes_and_pay(message, lang)
         return
 
-    # 3. ስልኩ ከሌለ እንዲያጋራ መጠየቅ
-    kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True)]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
+    # 3. ስልኩ ከሌለ State ሴት እናደርጋለን (ቦቱ ስልክ እየጠበቀ መሆኑን እንዲያውቅ)
+    await state.set_state(LotteryStates.waiting_for_phone)
 
-    if lang == "am":
-        text = "🔐 **የደህንነት ማረጋገጫ**\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
-    else:
-        text = "🔐 **Security Verification**\n\nPlease share your contact first to buy a ticket. This helps us call you if you win."
+    kb_builder = ReplyKeyboardBuilder()
+    kb_builder.row(types.KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True))
     
-    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    if lang == "am":
+        text = "🔐 <b>የደህንነት ማረጋገጫ</b>\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
+    else:
+        text = "🔐 <b>Security Verification</b>\n\nPlease share your contact first to buy a ticket. This helps us call you if you win."
+    
+    await message.answer(text, reply_markup=kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True), parse_mode="HTML")
 
-@dp.message(F.contact)
-async def handle_contact(message: types.Message):
+# 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል
+@dp.message(LotteryStates.waiting_for_phone, F.contact)
+async def handle_contact(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
     
-    # ስልኩን መመዝገብ
-    supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
-    
-    res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-    lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+    try:
+        # ስልኩን በዳታቤዝ ውስጥ ማዘመን (Update)
+        supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+        
+        # ቋንቋውን ለማወቅ
+        res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
 
-    await message.answer("✅", reply_markup=get_main_menu(lang)) # ዋናው ሜኑ እንዲመለስ
-    await show_prizes_and_pay(message, lang)
+        # ስልኩ መመዝገቡን ማረጋገጫ መስጠት
+        success_msg = "✅ ስልክዎ ተመዝግቧል።" if lang == "am" else "✅ Phone registered."
+        await message.answer(success_msg, reply_markup=get_main_menu(lang)) 
+
+        # ስቴቱን ማጽዳት (ስልክ መቀበል ስለጨረስን)
+        await state.clear()
+
+        # አሁን በቀጥታ ወደ ሽልማት እና ክፍያ ዝርዝር መውሰድ
+        await show_prizes_and_pay(message, lang)
+        
+    except Exception as e:
+        print(f"Error updating phone: {e}")
+        error_text = "⚠️ ስህተት ተከስቷል፣ እባክዎ እንደገና ይሞክሩ።"
+        await message.answer(error_text)
+        
 
 # ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
 async def show_prizes_and_pay(message: types.Message, lang: str):
