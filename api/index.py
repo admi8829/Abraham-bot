@@ -65,19 +65,65 @@ def get_start_inline():
     return builder.as_markup()
     
 # --- Handlers ---
-@dp.message(Command("start"))
+
+
+    # --- 4. የዲዛይን ስራ (Welcome Message) ---
+    if user_lang == "en":
+        welcome_text = (
+            f"👋 **ሰላም {message.from_user.first_name}!**\n"
+            "ወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n"
+            "🎯 **እድለኛ ይሁኑ!** አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ።"
+        )
+        menu_msg = "🎛 ከታች ካሉት አማራጮች አንዱን ይምረጡ፦"
+    else:
+        welcome_text = (
+      @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username or "User"
-    CHANNEL_ID = -1003866954136  # ያንተ የቻናል ID
-    
-    # --- 1. የቻናል ግዴታ (Member Check) ---
+    CHANNEL_ID = -1003866954136 
+
+    # --- 1. የግብዣ (Referral) መረጃን መለየት ---
+    args = message.text.split()
+    referrer_id = None
+    if len(args) > 1 and args[1].isdigit():
+        referrer_id = int(args[1])
+        if referrer_id == user_id: 
+            referrer_id = None
+
+    # --- 2. ዳታቤዝ ውስጥ መመዝገብ (ወደ ላይ ተቀይሯል) ---
+    # ተጠቃሚው ቻናሉን ቢቀላቀልም ባይቀላቀልም መጀመሪያ ዳታቤዝ ውስጥ መግባት አለበት
+    try:
+        # አስቀድሞ መኖሩን ማረጋገጥ
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        
+        if not res.data:
+            user_lang = 'am' # Default ቋንቋ
+            supabase.table("users").insert({
+                "user_id": user_id, 
+                "username": username, 
+                "lang": user_lang,
+                "referred_by": referrer_id 
+            }).execute()
+            
+            # ለጋባዡ መልእክት መላክ
+            if referrer_id:
+                try: 
+                    await bot.send_message(referrer_id, "🎉 አዲስ ሰው በእርስዎ ሊንክ ቦቱን ተቀላቅሏል!")
+                except: 
+                    pass
+        else:
+            user_lang = res.data[0].get('lang', 'am')
+    except Exception as e:
+        print(f"DB Error at Registration: {e}")
+        user_lang = 'am'
+
+    # --- 3. የቻናል ግዴታ (Member Check) ---
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         if member.status in ["left", "kicked"]:
-            # ቻናሉን ካልተቀላቀለ የሚመጣ መልእክት
             kb = InlineKeyboardBuilder()
-            kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/ethiouh")) # የቻናልህን ሊንክ እዚህ ቀይረው
+            kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/ethiouh"))
             kb.row(types.InlineKeyboardButton(text="🔄 ተቀላቅያለሁ / I joined", callback_data="check_join"))
             
             join_text = (
@@ -85,42 +131,13 @@ async def start_handler(message: types.Message):
                 "ይህም አሸናፊዎችን እና አዳዲስ መረጃዎችን በፍጥነት ለማግኘት ይረዳዎታል።"
             )
             await message.answer(join_text, reply_markup=kb.as_markup())
-            return
+            return # ተጠቃሚው ቻናሉን እስኪቀላቀል እዚህ ጋር ይቆማል
     except Exception as e:
         print(f"Join check error: {e}")
 
-    # --- 2. የግብዣ (Referral) ሲስተም ---
-    args = message.text.split()
-    referrer_id = None
-    if len(args) > 1 and args[1].isdigit():
-        referrer_id = int(args[1])
-        if referrer_id == user_id: referrer_id = None
-
-    # --- 3. ዳታቤዝ ውስጥ መመዝገብ ---
-    try:
-        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        
-        if not res.data:
-            user_lang = 'en'
-            supabase.table("users").insert({
-                "user_id": user_id, 
-                "username": username, 
-                "lang": 'en',
-                "referred_by": referrer_id # ጋባዡ እዚህ ይመዘገባል
-            }).execute()
-            
-            # ለጋባዡ መረጃ እንዲደርሰው (ከተፈለገ)
-            if referrer_id:
-                try: await bot.send_message(referrer_id, "🎉 አዲስ ሰው በእርስዎ ሊንክ ቦቱን ተቀላቅሏል!")
-                except: pass
-        else:
-            user_lang = res.data[0].get('lang', 'am')
-    except Exception as e:
-        print(f"DB Error: {e}")
-        user_lang = 'en'
-
-    # --- 4. የዲዛይን ስራ (Welcome Message) ---
-    if user_lang == "en":
+    # --- 4. የዌልካም መልእክት (Welcome Message) ---
+    # ተጠቃሚው ቻናሉን ካለፈ ብቻ እዚህ ይደርሳል
+    if user_lang == "am":
         welcome_text = (
             f"👋 **ሰላም {message.from_user.first_name}!**\n"
             "ወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n"
@@ -137,6 +154,7 @@ async def start_handler(message: types.Message):
 
     await message.answer(welcome_text, reply_markup=get_start_inline(), parse_mode="Markdown")
     await message.answer(menu_msg, reply_markup=get_main_menu(user_lang))
+        
 
 # --- 5. የ 'Check Join' በተን ሲነካ ---
 @dp.callback_query(F.data == "check_join")
