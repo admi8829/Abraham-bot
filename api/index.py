@@ -7,8 +7,8 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from aiogram.fsm.state import State, StatesGroup # ለደረጃዎች (FSM)
-from aiogram.fsm.context import FSMContext        # ለደረጃዎች (FSM)
+from aiogram.fsm.state import State, StatesGroup 
+from aiogram.fsm.context import FSMContext        
 from supabase import create_client, Client
 
 # --- 1. Environment Variables ---
@@ -17,7 +17,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BASE_URL = os.getenv("WEBHOOK_URL") 
 ADMIN_ID = os.getenv("ADMIN_ID") 
-CHANNEL_ID = -1003866954136  # ያንተ የቻናል ID (አስፈላጊ ነው)
+CHANNEL_ID = -1003866954136  
 
 # --- 2. Initialization ---
 bot = Bot(token=TOKEN)
@@ -29,25 +29,22 @@ app = FastAPI()
 WEBHOOK_PATH = f"/bot/{TOKEN}"
 FINAL_WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}"
 
-# --- 3. FSM States (ደረጃዎችን መቆጣጠሪያ) ---
+# --- 3. FSM States ---
 class LotteryStates(StatesGroup):
-    waiting_for_phone = State()          # ስልክ ቁጥር እስኪላክ
-    waiting_for_receipt = State()        # ደረሰኝ ፎቶ እስኪላክ
-    waiting_for_broadcast_content = State() # የብሮድካስት መልእክት እስኪላክ
-    waiting_for_broadcast_range = State()   # የሰዎች ብዛት (ክልል) እስኪላክ
+    waiting_for_phone = State()          
+    waiting_for_receipt = State()        
+    waiting_for_broadcast_content = State() 
+    waiting_for_broadcast_range = State()   
 
-# --- 4. Helper Functions (ረዳት ፈንክሽኖች) ---
-
+# --- 4. Helper Functions ---
 async def is_member(user_id: int):
-    """ተጠቃሚው ቻናሉን መቀላቀሉን ቼክ ያደርጋል"""
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
 
-# --- 5. Keyboards (አዝራሮች) ---
-
+# --- 5. Keyboards ---
 def get_main_menu(lang="am"):
     kb = ReplyKeyboardBuilder()
     if lang == "en":
@@ -69,20 +66,19 @@ def get_main_menu(lang="am"):
 
 def get_start_inline():
     builder = InlineKeyboardBuilder()
-    # እነዚህን ሊንኮች በራስህ ትክክለኛ ሊንኮች ቀይራቸው
     builder.row(types.InlineKeyboardButton(text="🌐 Website", url="https://yourwebsite.com"))
     builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
     builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
     return builder.as_markup()
 
-# --- 2. የ /start Handler (ሙሉው ስራ) ---
+# --- 6. Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
     user_id = message.from_user.id
     full_name = html.escape(message.from_user.full_name)
     username = message.from_user.username or "User"
     
-    # --- A. የቻናል ግዴታ (Member Check) ---
+    # A. የቻናል ግዴታ ቼክ
     if not await is_member(user_id):
         kb = InlineKeyboardBuilder()
         kb.row(types.InlineKeyboardButton(text="📢 ቻናሉን ተቀላቀል / Join Channel", url="https://t.me/ethiouh"))
@@ -96,21 +92,20 @@ async def start_handler(message: types.Message):
         await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
         return
 
-    # --- B. የግብዣ (Referral) መረጃ ማውጣት ---
-    args = message.text.split()
+    # B. Referral Logic (ከስህተት የጸዳ)
     referrer_id = None
-    if len(args) > 1 and args[1].isdigit():
-        temp_referrer = int(args[1])
-        if temp_referrer != user_id: # ራሱን እንዳይጋብዝ
-            referrer_id = temp_referrer
+    if message.text and len(message.text.split()) > 1:
+        ref_arg = message.text.split()[1]
+        if ref_arg.isdigit():
+            temp_referrer = int(ref_arg)
+            if temp_referrer != user_id:
+                referrer_id = temp_referrer
 
-    # --- C. ዳታቤዝ ውስጥ መመዝገብ (Upsert - ካለ አያባዛም፣ ከሌለ ይጨምራል) ---
+    # C. Database Registration
     try:
-        # መጀመሪያ ተጠቃሚው መኖሩን እና ቋንቋውን ቼክ እናደርጋለን
         res = supabase.table("users").select("*").eq("user_id", user_id).execute()
         
         if not res.data:
-            # አዲስ ተጠቃሚ ከሆነ ብቻ እንመዘግባለን
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username,
@@ -121,57 +116,39 @@ async def start_handler(message: types.Message):
             }).execute()
             
             user_lang = 'am'
-            # ለጋባዡ መረጃ መላክ
             if referrer_id:
                 try: 
-                    await bot.send_message(
-                        referrer_id, 
-                        f"🎉 <b>አዲስ ሰው በእርስዎ ሊንክ ተቀላቅሏል!</b>\nስም፦ {full_name}",
-                        parse_mode="HTML"
-                    )
+                    await bot.send_message(referrer_id, f"🎉 <b>አዲስ ሰው በእርስዎ ሊንክ ተቀላቅሏል!</b>\nስም፦ {full_name}", parse_mode="HTML")
                 except: pass
         else:
-            # ነባር ተጠቃሚ ከሆነ ዳታውን እናመጣለን
             user_lang = res.data[0].get('lang', 'am')
-            
     except Exception as e:
         print(f"DB Error: {e}")
         user_lang = 'am'
 
-    # --- D. የዲዛይን ስራ (Welcome Message) ---
+    # D. Welcome Messages
     if user_lang == "am":
-        welcome_text = (
-            f"👋 <b>ሰላም {full_name}!</b>\n"
-            "ወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n"
-            "🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ።"
-        )
+        welcome_text = f"👋 <b>ሰላም {full_name}!</b>\nወደ ትኬት መቁረጫ ቦት በደህና መጡ።\n\n🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ।"
         menu_msg = "🎛 <b>ከታች ካሉት አማራጮች አንዱን ይምረጡ፦</b>"
     else:
-        welcome_text = (
-            f"👋 <b>Hello {full_name}!</b>\n"
-            "Welcome to our Lottery Ticket Bot.\n\n"
-            "🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big."
-        )
+        welcome_text = f"👋 <b>Hello {full_name}!</b>\nWelcome to our Lottery Ticket Bot.\n\n🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big."
         menu_msg = "🎛 <b>Please choose an option from below:</b>"
 
-    # ማሳሰቢያ፡ get_start_inline() እና get_main_menu() ቀድሞ በኮድህ መኖራቸውን እርግጠኛ ሁን
-    await message.answer(welcome_text, parse_mode="HTML")
+    await message.answer(welcome_text, reply_markup=get_start_inline(), parse_mode="HTML")
     await message.answer(menu_msg, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
 
-# --- 3. የ 'Check Join' በተን ሲነካ ---
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    
     if await is_member(user_id):
         await callback.message.delete()
-        # Start መልእክቱን እንደ አዲስ መላክ (የድሮው message.answer እንዲሰራ)
+        # ለ start_handler አርቲፊሻል ሜሴጅ መፍጠር (ጽሁፍ የሌለውን error ለመከላከል)
+        callback.message.text = "/start" 
         await start_handler(callback.message)
-        await callback.answer("✅ እናመሰግናለን! ቻናሉን ተቀላቅለዋል።")
+        await callback.answer("✅ ተቀላቅለዋል!")
     else:
-        await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም! እባክዎ መጀመሪያ Join ይበሉ እንጂ።", show_alert=True)
-        
-    
+        await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም!", show_alert=True)
+
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message):
     user_id = message.from_user.id
