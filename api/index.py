@@ -184,35 +184,52 @@ async def buy_ticket_step1(message: types.Message, state: FSMContext):
     await message.answer(text, reply_markup=kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True), parse_mode="HTML")
 
 # 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል
+# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል (የተስተካከለ) ---
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
 async def handle_contact(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
+    full_name = html.escape(message.from_user.full_name)
+    username = message.from_user.username or "User"
     
     try:
-        # ስልኩን በዳታቤዝ ውስጥ ማዘመን (Update)
-        supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+        # 1. መጀመሪያ በ Update ለመሞከር (ተጠቃሚው ቀድሞ በ /start ተመዝግቦ ከሆነ)
+        update_res = supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
         
-        # ቋንቋውን ለማወቅ
-        res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+        # 2. Update ካልሰራ (ተጠቃሚው በሆነ ምክንያት ዳታቤዝ ውስጥ ካልተገኘ) አዲስ እንመዘግባለን
+        if not update_res.data:
+            supabase.table("users").upsert({
+                "user_id": user_id,
+                "username": username,
+                "full_name": full_name,
+                "phone": phone,
+                "lang": 'am'
+            }).execute()
+        
+        # 3. የቋንቋ ምርጫውን ከዳታቤዝ እናምጣ (ካልተገኘ 'am' እንጠቀማለን)
+        lang_res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = lang_res.data[0].get('lang', 'am') if lang_res.data else 'am'
 
-        # ስልኩ መመዝገቡን ማረጋገጫ መስጠት
-        success_msg = "✅ ስልክዎ ተመዝግቧል።" if lang == "am" else "✅ Phone registered."
-        await message.answer(success_msg, reply_markup=get_main_menu(lang)) 
+        # 4. ለተጠቃሚው ማረጋገጫ መስጠት
+        if lang == "am":
+            success_msg = "✅ <b>ስልክዎ በትክክል ተመዝግቧል!</b>"
+        else:
+            success_msg = "✅ <b>Your phone has been registered!</b>"
+            
+        await message.answer(success_msg, reply_markup=get_main_menu(lang), parse_mode="HTML") 
 
-        # ስቴቱን ማጽዳት (ስልክ መቀበል ስለጨረስን)
+        # 5. ስቴቱን ማጽዳት (ስልክ መቀበል ስለጨረስን)
         await state.clear()
 
-        # አሁን በቀጥታ ወደ ሽልማት እና ክፍያ ዝርዝር መውሰድ
+        # 6. በቀጥታ ወደ ሽልማት እና ክፍያ ዝርዝር መውሰድ
         await show_prizes_and_pay(message, lang)
         
     except Exception as e:
-        print(f"Error updating phone: {e}")
-        error_text = "⚠️ ስህተት ተከስቷል፣ እባክዎ እንደገና ይሞክሩ።"
+        # ስህተት ካለ እዚህ ጋር ይታያል
+        print(f"❌ Error in handle_contact: {e}")
+        error_text = "⚠️ ይቅርታ፣ ስልክዎን መመዝገብ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።"
         await message.answer(error_text)
         
-
 # ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
