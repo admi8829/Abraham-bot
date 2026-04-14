@@ -589,6 +589,8 @@ async def enhanced_broadcast(message: types.Message):
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
     )
     
+
+
 @dp.message(Command("draw"))
 async def professional_draw_handler(message: types.Message):
     # 1. የአድሚን ፍቃድ ቼክ
@@ -596,76 +598,90 @@ async def professional_draw_handler(message: types.Message):
         return
 
     GROUP_CHAT_ID = "-1003878868241" # ያንተ ግሩፕ ID
-    ADMIN_USERNAME = "@your_admin_username" # የአድሚኑ ዩዘር ኔም እዚህ ይግባ
+    ADMIN_USERNAME = "your_admin_username" # የአድሚኑ ዩዘር ኔም (ያለ @)
 
     try:
-        # 2. በሂደት ላይ ያሉ (approved) ትኬቶችን ከዳታቤዝ ማምጣት
+        # 2. በሂደት ላይ ያሉ (approved) ትኬቶችን ማምጣት
         res = supabase.table("tickets").select("*").eq("status", "approved").execute()
         all_tickets = res.data
 
         if not all_tickets:
-            await message.answer("⚠️ ምንም የጸደቀ ትኬት በዳታቤዙ ውስጥ የለም።")
+            await message.answer("⚠️ <b>ምንም የጸደቀ ትኬት በዳታቤዙ ውስጥ የለም።</b>", parse_mode="HTML")
             return
 
-        # 3. ልዩ ተጠቃሚዎችን መለየት (አንድ ሰው ብዙ ቢቆርጥም አንዴ እንዲቆጠር)
+        # 3. ልዩ ተጠቃሚዎችን መለየት
         unique_users = list({t['user_id'] for t in all_tickets})
 
         if len(unique_users) < 3:
-            await message.answer(f"⚠️ ቢያንስ 3 ተሳታፊ ያስፈልጋል። አሁን ያሉት ተሳታፊዎች ብዛት: {len(unique_users)}")
+            await message.answer(f"⚠️ <b>ቢያንስ 3 ተሳታፊ ያስፈልጋል።</b>\nአሁን ያሉት ተሳታፊዎች: {len(unique_users)}", parse_mode="HTML")
             return
 
-        # 4. የቆጠራ Animation (Feature 1)
-        status_msg = await bot.send_message(GROUP_CHAT_ID, "🎲 **የዕጣ ማውጫው ተጀምሯል!**\nእባክዎ ይጠብቁ...")
-        animations = ["3️⃣...", "2️⃣...", "1️⃣...", "🎰 እጣው እየወጣ ነው..."]
+        # 4. የቆጠራ Animation
+        status_msg = await bot.send_message(GROUP_CHAT_ID, "🎰 <b>የዕጣ ማውጫው ዝግጅት ተጠናቋል!</b>\nእባክዎ ይከታተሉ...", parse_mode="HTML")
+        animations = ["🕒 <b>3...</b>", "🕑 <b>2...</b>", "🕐 <b>1...</b>", "🚀 <b>እጣው እየወጣ ነው...</b>"]
         for anim in animations:
             await asyncio.sleep(1.5)
-            await status_msg.edit_text(f"🎲 **የዕጣ ማውጫው ተጀምሯል!**\n\n{anim}")
+            await status_msg.edit_text(f"🎲 <b>የዕጣ ማውጫው ተጀምሯል!</b>\n\n{anim}", parse_mode="HTML")
 
-        # 5. 3 አሸናፊዎችን መምረጥ (Feature 4 - ያለ መደጋገም)
+        # 5. 3 አሸናፊዎችን መምረጥ
         winner_uids = random.sample(unique_users, k=3)
         ranks = ["1ኛ 🥇", "2ኛ 🥈", "3ኛ 🥉"]
-        summary_text = "🎉 **የዛሬው የዕጣ ማውጫ ውጤት!** 🎉\n\n"
         
-        # ለአሸናፊው የሚሆን Button
+        # የውጤት ሰሌዳ (Summary Card)
+        summary_card = (
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🎊 <b>የዛሬው የዕጣ ማውጫ ውጤት</b> 🎊\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        
+        # አድሚን ማነጋገሪያ Button
         builder = InlineKeyboardBuilder()
-        builder.row(types.InlineKeyboardButton(text="📞 አድሚን ያነጋግሩ", url=f"https://t.me/{ADMIN_USERNAME.replace('@','') }"))
+        builder.row(types.InlineKeyboardButton(text="📞 ሽልማት ለመቀበል እዚህ ይጫኑ", url=f"https://t.me/{ADMIN_USERNAME}"))
         contact_kb = builder.as_markup()
 
         for i, uid in enumerate(winner_uids):
-            # የዚህ ተጠቃሚ ከሆኑት ትኬቶች አንዱን ለዕጣው መምረጥ
             user_tickets = [t for t in all_tickets if t['user_id'] == uid]
             winner_ticket = random.choice(user_tickets)
             winner_number = winner_ticket['ticket_number']
             rank_label = ranks[i]
 
-            # የተጠቃሚ ስም ማምጣት
-            u_res = supabase.table("users").select("username").eq("user_id", uid).execute()
-            u_name = u_res.data[0]['username'] if u_res.data else "ተጠቃሚ"
+            # የተጠቃሚ ስም ማምጣትና ማጽዳት
+            u_res = supabase.table("users").select("username", "full_name").eq("user_id", uid).execute()
+            raw_name = u_res.data[0]['username'] if u_res.data and u_res.data[0]['username'] else u_res.data[0]['full_name']
+            u_name = html.escape(raw_name)
 
-            # ዳታቤዝ ላይ መመዝገብ
+            # ዳታቤዝ ማደስ
             supabase.table("winners").insert({"user_id": uid, "ticket_number": winner_number}).execute()
             supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", winner_number).execute()
 
-            # 6. ለአሸናፊው Inbox መላክ + Block ጥበቃ
+            # 6. Inbox መልእክት (Card Style)
             try:
-                msg = f"🎊 **እንኳን ደስ አለዎት!** 🎊\n\nየ **{rank_label}** እጣ አሸናፊ ሆነዋል።\n🎫 የትኬት ቁጥርዎ: `{winner_number}`\n\nሽልማትዎን ለመቀበል ከታች ያለውን ቁልፍ ተጭነው አድሚኑን ያነጋግሩ።"
-                await bot.send_message(uid, msg, reply_markup=contact_kb, parse_mode="Markdown")
-            except Exception as e:
-                # ሰውዬው Block ካደረገ ለአድሚኑ መረጃ ይደርሳል
-                await message.answer(f"⚠️ **ማሳሰቢያ:** አሸናፊው @{u_name} (ID: `{uid}`) ቦቱን Block ስላደረገ Inbox መልእክት አልደረሰውም።")
+                inbox_card = (
+                    f"🎁 <b>እንኳን ደስ አለዎት!</b> 🎁\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"እርስዎ የዛሬው የ <b>{rank_label}</b> እጣ አሸናፊ ሆነዋል!\n\n"
+                    f"🎫 <b>የትኬት ቁጥር:</b> <code>{winner_number}</code>\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📢 <i>ሽልማትዎን ለመቀበል አሁኑኑ አድሚኑን ያነጋግሩ።</i>"
+                )
+                await bot.send_message(uid, inbox_card, reply_markup=contact_kb, parse_mode="HTML")
+            except Exception:
+                await message.answer(f"⚠️ <b>ማሳሰቢያ:</b> አሸናፊው @{u_name} ቦቱን Block ስላደረገ መልእክት አልደረሰውም።", parse_mode="HTML")
 
-            summary_text += f"🏆 **{rank_label}**፦ @{u_name} (ቁጥር፦ `{winner_number}`)\n"
+            summary_card += f"🏆 <b>{rank_label}</b> | @{u_name}\n🎫 ቁጥር: <code>{winner_number}</code>\n\n"
 
-        # 7. የቀሩትን ትኬቶች Expire ማድረግ (አሁን ካሸነፉት ውጪ ያሉትን)
+        # 7. ሌሎችን Expire ማድረግ
         supabase.table("tickets").update({"status": "expired"}).eq("status", "approved").execute()
 
         # 8. ውጤቱን ለግሩፕ ማብሰር
-        await status_msg.edit_text(summary_text + "\n✨ ለሁሉም አሸናፊዎች እንኳን ደስ አላችሁ!\nቀጣዩ እድለኛ እርስዎ ሊሆኑ ይችላሉ።", parse_mode="Markdown")
-        await message.answer("✅ የዕጣ ማውጫው በስኬት ተጠናቋል።")
+        summary_card += "━━━━━━━━━━━━━━━━━━━━\n✨ <b>ለአሸናፊዎች በሙሉ እንኳን ደስ አላችሁ!</b>"
+        await status_msg.edit_text(summary_card, parse_mode="HTML")
+        await message.answer("✅ <b>የዕጣ ማውጫው በስኬት ተጠናቋል። ውጤቱ በግሩፕ ተለጥፏል።</b>", parse_mode="HTML")
 
     except Exception as e:
         print(f"Draw Error: {e}")
-        await message.answer(f"❌ በዕጣ ማውጫው ላይ ስህተት ተፈጥሯል፦ {e}")
+        await message.answer(f"❌ <b>ስህተት ተፈጥሯል:</b>\n<code>{e}</code>", parse_mode="HTML")
+        
         
 # --- Webhook ---
 #--@app.on_event("startup")
