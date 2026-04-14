@@ -665,9 +665,9 @@ async def pick_winner(message: types.Message):
         await message.answer("ስህተት ተከስቷል።")
     
 # --- Webhook ---
-@app.on_event("startup")
-async def on_startup():
-    await bot.set_webhook(url=FINAL_WEBHOOK_URL)
+#--@app.on_event("startup")
+#async def on_startup():
+    #await bot.set_webhook(url=FINAL_WEBHOOK_URL)
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
