@@ -589,81 +589,84 @@ async def enhanced_broadcast(message: types.Message):
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
     )
     
-
-
 @dp.message(Command("draw"))
-async def pick_winner(message: types.Message):
-    # አድሚን መሆንህን ያረጋግጣል
+async def professional_draw_handler(message: types.Message):
+    # 1. የአድሚን ፍቃድ ቼክ
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    GROUP_CHAT_ID = "-1003878868241" 
+    GROUP_CHAT_ID = "-1003878868241" # ያንተ ግሩፕ ID
+    ADMIN_USERNAME = "@your_admin_username" # የአድሚኑ ዩዘር ኔም እዚህ ይግባ
 
     try:
-        # 1. ክፍያቸው የተረጋገጠ ቲኬቶችን ማምጣት
+        # 2. በሂደት ላይ ያሉ (approved) ትኬቶችን ከዳታቤዝ ማምጣት
         res = supabase.table("tickets").select("*").eq("status", "approved").execute()
-        tickets = res.data
+        all_tickets = res.data
 
-        if not tickets:
-            await message.answer("ምንም የተሸጠ ቲኬት የለም።")
+        if not all_tickets:
+            await message.answer("⚠️ ምንም የጸደቀ ትኬት በዳታቤዙ ውስጥ የለም።")
             return
 
-        # 2. አሸናፊውን በዕድል መምረጥ
-        winner_ticket = random.choice(tickets)
-        winner_user_id = winner_ticket['user_id']
-        winner_number = winner_ticket['ticket_number']
+        # 3. ልዩ ተጠቃሚዎችን መለየት (አንድ ሰው ብዙ ቢቆርጥም አንዴ እንዲቆጠር)
+        unique_users = list({t['user_id'] for t in all_tickets})
 
-        # 3. የአሸናፊውን ስም ማግኘት
-        user_res = supabase.table("users").select("username").eq("user_id", winner_user_id).execute()
-        winner_name = user_res.data[0]['username'] if user_res.data else "ተጠቃሚ"
+        if len(unique_users) < 3:
+            await message.answer(f"⚠️ ቢያንስ 3 ተሳታፊ ያስፈልጋል። አሁን ያሉት ተሳታፊዎች ብዛት: {len(unique_users)}")
+            return
 
-        # --- አዲሱ ክፍል፡ ወደ Winners Table መመዝገብ እና የቲኬቱን Status መቀየር ---
-        try:
-            # ወደ winners table መመዝገብ
-            supabase.table("winners").insert({
-                "user_id": winner_user_id,
-                "ticket_number": winner_number
-            }).execute()
-            
-            # በ tickets table ውስጥ የቲኬቱን ሁኔታ ወደ 'winner' መቀየር
-            supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", winner_number).execute()
-        except Exception as db_err:
-            print(f"Database recording error: {db_err}")
-        # ------------------------------------------------------------
+        # 4. የቆጠራ Animation (Feature 1)
+        status_msg = await bot.send_message(GROUP_CHAT_ID, "🎲 **የዕጣ ማውጫው ተጀምሯል!**\nእባክዎ ይጠብቁ...")
+        animations = ["3️⃣...", "2️⃣...", "1️⃣...", "🎰 እጣው እየወጣ ነው..."]
+        for anim in animations:
+            await asyncio.sleep(1.5)
+            await status_msg.edit_text(f"🎲 **የዕጣ ማውጫው ተጀምሯል!**\n\n{anim}")
 
-        # --- መልእክቶቹን ማዘጋጀት ---
-        public_text = (
-            "🎉 **እንኳን ደስ አላችሁ! የዛሬው አሸናፊ ተለይቷል!** 🎉\n\n"
-            f"👤 አሸናፊ፦ @{winner_name}\n"
-            f"🎫 የቲኬት ቁጥር፦ {winner_number}\n\n"
-            "ቀጣዩ አሸናፊ እርስዎ ይሁኑ! አሁኑኑ ትኬት ይቁረጡ።"
-        )
+        # 5. 3 አሸናፊዎችን መምረጥ (Feature 4 - ያለ መደጋገም)
+        winner_uids = random.sample(unique_users, k=3)
+        ranks = ["1ኛ 🥇", "2ኛ 🥈", "3ኛ 🥉"]
+        summary_text = "🎉 **የዛሬው የዕጣ ማውጫ ውጤት!** 🎉\n\n"
         
-        private_text = (
-            "🎊 **እንኳን ደስ አለዎት!** 🎊\n\n"
-            f"በቆረጡት የሎተሪ ቲኬት ቁጥር **{winner_number}** አሸናፊ ሆነዋል። "
-            "እባክዎ ሽልማትዎን ለመቀበል አስተዳዳሪውን ያነጋግሩ።"
-        )
+        # ለአሸናፊው የሚሆን Button
+        builder = InlineKeyboardBuilder()
+        builder.row(types.InlineKeyboardButton(text="📞 አድሚን ያነጋግሩ", url=f"https://t.me/{ADMIN_USERNAME.replace('@','') }"))
+        contact_kb = builder.as_markup()
 
-        # 4. ለአሸናፊው በግል (Inbox) መላክ
-        try:
-            await bot.send_message(winner_user_id, private_text)
-        except Exception as e:
-            print(f"ለአሸናፊው መላክ አልተቻለም: {e}")
+        for i, uid in enumerate(winner_uids):
+            # የዚህ ተጠቃሚ ከሆኑት ትኬቶች አንዱን ለዕጣው መምረጥ
+            user_tickets = [t for t in all_tickets if t['user_id'] == uid]
+            winner_ticket = random.choice(user_tickets)
+            winner_number = winner_ticket['ticket_number']
+            rank_label = ranks[i]
 
-        # 5. ወደ ቴሌግራም ግሩፕ/ቻናል መላክ
-        try:
-            await bot.send_message(GROUP_CHAT_ID, public_text)
-        except Exception as e:
-            print(f"ወደ ግሩፕ መላክ አልተቻለም: {e}")
+            # የተጠቃሚ ስም ማምጣት
+            u_res = supabase.table("users").select("username").eq("user_id", uid).execute()
+            u_name = u_res.data[0]['username'] if u_res.data else "ተጠቃሚ"
 
-        # 6. ለአድሚኑ ማረጋገጫ መስጠት
-        await message.answer(f"✅ አሸናፊው ተለይቷል፦ @{winner_name}\nመረጃው በዳታቤዝ ተመዝግቧል።")
+            # ዳታቤዝ ላይ መመዝገብ
+            supabase.table("winners").insert({"user_id": uid, "ticket_number": winner_number}).execute()
+            supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", winner_number).execute()
+
+            # 6. ለአሸናፊው Inbox መላክ + Block ጥበቃ
+            try:
+                msg = f"🎊 **እንኳን ደስ አለዎት!** 🎊\n\nየ **{rank_label}** እጣ አሸናፊ ሆነዋል።\n🎫 የትኬት ቁጥርዎ: `{winner_number}`\n\nሽልማትዎን ለመቀበል ከታች ያለውን ቁልፍ ተጭነው አድሚኑን ያነጋግሩ።"
+                await bot.send_message(uid, msg, reply_markup=contact_kb, parse_mode="Markdown")
+            except Exception as e:
+                # ሰውዬው Block ካደረገ ለአድሚኑ መረጃ ይደርሳል
+                await message.answer(f"⚠️ **ማሳሰቢያ:** አሸናፊው @{u_name} (ID: `{uid}`) ቦቱን Block ስላደረገ Inbox መልእክት አልደረሰውም።")
+
+            summary_text += f"🏆 **{rank_label}**፦ @{u_name} (ቁጥር፦ `{winner_number}`)\n"
+
+        # 7. የቀሩትን ትኬቶች Expire ማድረግ (አሁን ካሸነፉት ውጪ ያሉትን)
+        supabase.table("tickets").update({"status": "expired"}).eq("status", "approved").execute()
+
+        # 8. ውጤቱን ለግሩፕ ማብሰር
+        await status_msg.edit_text(summary_text + "\n✨ ለሁሉም አሸናፊዎች እንኳን ደስ አላችሁ!\nቀጣዩ እድለኛ እርስዎ ሊሆኑ ይችላሉ።", parse_mode="Markdown")
+        await message.answer("✅ የዕጣ ማውጫው በስኬት ተጠናቋል።")
 
     except Exception as e:
-        print(f"Error: {e}")
-        await message.answer("ስህተት ተከስቷል።")
-    
+        print(f"Draw Error: {e}")
+        await message.answer(f"❌ በዕጣ ማውጫው ላይ ስህተት ተፈጥሯል፦ {e}")
+        
 # --- Webhook ---
 #--@app.on_event("startup")
 #async def on_startup():
