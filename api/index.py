@@ -588,41 +588,38 @@ async def enhanced_broadcast(message: types.Message):
         f"🚫 የዘጉ (Blocked)፦ {blocked_count}\n"
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
     )
-    
 @dp.message(Command("draw"))
 async def professional_draw_handler(message: types.Message):
-    # 1. የአድሚን ፍቃድ ቼክ
+    # 1. የአድሚን ፍቃድ ቼክ (Security)
     if str(message.from_user.id) != str(ADMIN_ID):
         return
 
     GROUP_CHAT_ID = "-1003878868241" 
-    ADMIN_USERNAME = "your_admin_username" # የአድሚን ዩዘርኔም (ያለ @)
+    ADMIN_USERNAME = "your_admin_username" # ያንተ ዩዘር ኔም
 
     try:
-        # 2. ዳታዎችን ማምጣት (ትኬቶችን እና ሽልማቶችን)
+        # 2. ዳታዎችን ማምጣት (Tickets & Prizes)
         ticket_res = supabase.table("tickets").select("*").eq("status", "approved").execute()
-        # በፎቶህ መሰረት 'rank' እና 'amount' ኮለሞችን እናመጣለን
         prize_res = supabase.table("prizes").select("rank, amount").execute()
         
         all_tickets = ticket_res.data
-        # ሽልማቶችን በዲክሽነሪ እናስቀምጣለን (ቁልፉ rank ነው)
         all_prizes = {p['rank']: p['amount'] for p in prize_res.data}
 
         if not all_tickets:
             await message.answer("⚠️ <b>ምንም የጸደቀ ትኬት የለም።</b>", parse_mode="HTML")
             return
 
-        # 3. የዕድል ስሌት (Weighted Draw - ብዙ የቆረጠ እድሉ ይሰፋል)
+        # 3. የእድል ስሌት (Weighted Draw - ብዙ የቆረጠ እድሉ ይሰፋል)
         all_candidates = [t['user_id'] for t in all_tickets]
         unique_users_count = len(set(all_candidates))
 
         if unique_users_count < 3:
-            await message.answer(f"⚠️ <b>ተሳታፊ አይበቃም።</b> ቢያንስ 3 ሰዎች ያስፈልጋሉ።", parse_mode="HTML")
+            await message.answer(f"⚠️ <b>ቢያንስ 3 ተሳታፊ ያስፈልጋል።</b>", parse_mode="HTML")
             return
 
-        # 4. የቆጠራ Animation (ግሩፕ ላይ)
-        status_msg = await bot.send_message(GROUP_CHAT_ID, "🎰 <b>የዕጣ ዝግጅት ተጀምሯል...</b>", parse_mode="HTML")
-        for anim in ["🕒 <b>3...</b>", "🕑 <b>2...</b>", "🕐 <b>1...</b>", "🚀 <b>እጣው እየወጣ ነው...</b>"]:
+        # 4. የቆጠራ Animation (Countdown)
+        status_msg = await bot.send_message(GROUP_CHAT_ID, "🎰 <b>የዕጣ ዝግጅት ተጀምሯል... / Draw Started...</b>", parse_mode="HTML")
+        for anim in ["🕒 <b>3...</b>", "🕑 <b>2...</b>", "🕐 <b>1...</b>", "🚀 <b>እጣው እየወጣ ነው... / Drawing...</b>"]:
             await asyncio.sleep(1.5)
             await status_msg.edit_text(f"🎲 <b>ዕድለኛውን እየፈለግን ነው...</b>\n\n{anim}", parse_mode="HTML")
 
@@ -635,25 +632,22 @@ async def professional_draw_handler(message: types.Message):
                 winner_uids.append(chosen)
                 temp_list = [uid for uid in temp_list if uid != chosen]
 
-        # በግሩፕ ላይ የሚታዩ የደረጃ ስሞች
         ranks_display = ["1ኛ 🥇", "2ኛ 🥈", "3ኛ 🥉"]
-        # በዳታቤዝህ (ፎቶው) ላይ ያሉት የ rank እሴቶች
         db_ranks = ["1ኛ", "2ኛ", "3ኛ"] 
         
+        # የግሩፕ ካርድ መጀመሪያ (Card Design)
         summary_card = (
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎊 <b>የዛሬው የዕጣ ማውጫ ውጤት</b> 🎊\n"
+            "🎊 <b>የዛሬው የዕጣ ውጤት / TODAY'S DRAW</b> 🎊\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
         )
 
         for i, uid in enumerate(winner_uids):
             rank_label = ranks_display[i]
-            rank_key = db_ranks[i] # '1ኛ'፣ '2ኛ' ወይም '3ኛ'
-            
-            # ሽልማቱን (amount) ከዳታቤዝ ማግኘት
-            prize_amount = all_prizes.get(rank_key, "ሽልማት")
+            rank_key = db_ranks[i]
+            prize_amount = all_prizes.get(rank_key, "ሽልማት/Prize")
 
-            # የተጠቃሚ መረጃ
+            # የተጠቃሚ መረጃ (User Profile)
             u_res = supabase.table("users").select("*").eq("user_id", uid).execute()
             user_data = u_res.data[0]
             u_name = html.escape(user_data['username'] or user_data['full_name'])
@@ -664,7 +658,7 @@ async def professional_draw_handler(message: types.Message):
             winner_ticket = random.choice(user_tickets)
             t_num = winner_ticket['ticket_number']
 
-            # 6. ዳታቤዝ ማደስ
+            # 6. ዳታቤዝ ማደስ (Record Winner)
             supabase.table("winners").insert({
                 "user_id": uid, 
                 "ticket_number": t_num, 
@@ -673,59 +667,45 @@ async def professional_draw_handler(message: types.Message):
             supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", t_num).execute()
 
             # 7. Inbox መልእክት (Multi-language)
-            builder = InlineKeyboardBuilder()
-            btn_text = "📞 አድሚን ያነጋግሩ" if u_lang == 'am' else "📞 Contact Admin"
-            builder.row(types.InlineKeyboardButton(text=btn_text, url=f"https://t.me/{ADMIN_USERNAME}"))
+            inbox_builder = InlineKeyboardBuilder()
+            btn_text = "📞 አድሚን ያነጋግሩ / Contact Admin"
+            inbox_builder.row(types.InlineKeyboardButton(text=btn_text, url=f"https://t.me/{ADMIN_USERNAME}"))
 
             if u_lang == 'am':
-                inbox_card = (
-                    f"🎁 <b>እንኳን ደስ አለዎት!</b> 🎁\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"እርስዎ የዛሬው የ <b>{rank_label}</b> አሸናፊ ሆነዋል!\n\n"
-                    f"🏆 <b>እጣ:</b> {rank_label}\n"
-                    f"💰 <b>ሽልማት:</b> {prize_amount}\n"
-                    f"🎫 <b>ትኬት:</b> <code>{t_num}</code>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📢 <i>ሽልማትዎን ለመቀበል አድሚኑን ያነጋግሩ።</i>"
-                )
+                inbox_txt = (f"🎁 <b>እንኳን ደስ አለዎት!</b>\nእርስዎ የ <b>{rank_label}</b> አሸናፊ ሆነዋል!\n"
+                             f"💰 ሽልማት: {prize_amount}\n🎫 ትኬት: <code>{t_num}</code>")
             else:
-                inbox_card = (
-                    f"🎁 <b>Congratulations!</b> 🎁\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"You are the <b>{rank_label}</b> winner!\n\n"
-                    f"🏆 <b>Rank:</b> {rank_label}\n"
-                    f"💰 <b>Prize:</b> {prize_amount}\n"
-                    f"🎫 <b>Ticket:</b> <code>{t_num}</code>\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📢 <i>Contact admin to claim your prize.</i>"
-                )
+                inbox_txt = (f"🎁 <b>Congratulations!</b>\nYou won the <b>{rank_label}</b> prize!\n"
+                             f"💰 Prize: {prize_amount}\n🎫 Ticket: <code>{t_num}</code>")
 
             try:
-                await bot.send_message(uid, inbox_card, reply_markup=builder.as_markup(), parse_mode="HTML")
+                await bot.send_message(uid, inbox_txt, reply_markup=inbox_builder.as_markup(), parse_mode="HTML")
             except:
-                await message.answer(f"⚠️ <b>Block ማሳሰቢያ:</b> @{u_name} ቦቱን Block ስላደረገ Inbox አልደረሰውም።")
+                await message.answer(f"⚠️ <b>Block ማሳሰቢያ:</b> @{u_name} ቦቱን ዘግቷል።")
 
-            # 8. የግሩፕ ካርድ ዝርዝር (አሳምረን)
+            # 8. የግሩፕ ካርድ ዝርዝር (Group Display)
             summary_card += (
                 f"👤 <b>አሸናፊ:</b> @{u_name}\n"
-                f"🎖 <b>ደረጃ:</b> {rank_label}\n"
-                f"💰 <b>ሽልማት:</b> {prize_amount}\n"
+                f"🏅 <b>ደረጃ:</b> {rank_label}\n"
+                f"🎁 <b>ሽልማት:</b> {prize_amount}\n"
                 f"🎫 <b>ትኬት:</b> <code>{t_num}</code>\n"
                 f"┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
             )
 
-        # 9. የቀሩትን ትኬቶች Expire ማድረግ
+        # 9. የዙር ማጠናቀቂያ (Clean Up & Marketing Button)
         supabase.table("tickets").update({"status": "expired"}).eq("status", "approved").execute()
 
-        # 10. ውጤቱን ለግሩፕ ማብሰር
-        summary_card += "\n✨ <b>ለአሸናፊዎች በሙሉ እንኳን ደስ አላችሁ!</b>\n━━━━━━━━━━━━━━━━━━━━━"
-        await status_msg.edit_text(summary_card, parse_mode="HTML")
-        await message.answer("✅ <b>የዕጣ ማውጫው በስኬት ተጠናቋል።</b>", parse_mode="HTML")
+        group_builder = InlineKeyboardBuilder()
+        group_builder.row(types.InlineKeyboardButton(text="🎫 ትኬት ቁረጥ / Buy Ticket", callback_data="buy_ticket"))
+        group_builder.row(types.InlineKeyboardButton(text="👤 አድሚን / Contact Admin", url=f"https://t.me/{ADMIN_USERNAME}"))
+
+        summary_card += "\n✨ <b>እንኳን ደስ አላችሁ! / Congratulations!</b>\n━━━━━━━━━━━━━━━━━━━━━"
+        await status_msg.edit_text(summary_card, reply_markup=group_builder.as_markup(), parse_mode="HTML")
+        await message.answer("✅ <b>የዕጣ ማውጫው በስኬት ተጠናቋል። / Draw Complete.</b>", parse_mode="HTML")
 
     except Exception as e:
-        print(f"Draw Error: {e}")
-        await message.answer(f"❌ <b>ስህተት:</b> <code>{e}</code>", parse_mode="HTML")
-        
+        await message.answer(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode="HTML")
+
         
 # --- Webhook ---
 #--@app.on_event("startup")
