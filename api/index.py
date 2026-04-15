@@ -707,10 +707,10 @@ async def professional_draw_handler(message: types.Message):
         await message.answer(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode="HTML")
 
         
-# --- Webhook ---
-#--@app.on_event("startup")
-#async def on_startup():
-    #await bot.set_webhook(url=FINAL_WEBHOOK_URL)
+#--- Webhook ---
+@app.on_event("startup")
+async def on_startup():
+    await bot.set_webhook(url=FINAL_WEBHOOK_URL)
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
