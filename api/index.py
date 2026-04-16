@@ -452,40 +452,92 @@ async def handle_photos(message: types.Message):
             # ስህተቱን በ Terminal ላይ ለማየት
             print(f"Detailed Error: {e}")
             await message.answer(f"❌ <b>Error processing photo:</b> <code>{e}</code>", parse_mode="HTML")
-        
-        
+
 
 @dp.message(F.text.in_({"👤 የእኔ መረጃ", "👤 My Info"}))
 async def my_info_handler(message: types.Message):
     user_id = message.from_user.id
     
     try:
-        # 1. የቋንቋ ምርጫውን ማወቅ
-        res_lang = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+        # 1. የተጠቃሚውን መረጃ ከዳታቤዝ ማምጣት
+        res_user = supabase.table("users").select("*").eq("user_id", user_id).execute()
+        if not res_user.data:
+            return await message.answer("User not found in database.")
+        
+        user_data = res_user.data[0]
+        lang = user_data.get('lang', 'en')
+        full_name = html.escape(user_data.get('full_name', 'N/A'))
+        username = f"@{user_data.get('username')}" if user_data.get('username') else "N/A"
+        phone = user_data.get('phone') or ("ያልተመዘገበ" if lang == "am" else "Not Registered")
 
-        # 2. የጸደቁ ቲኬቶችን ከዳታቤዝ ማምጣት
-        res_tickets = supabase.table("tickets").select("ticket_number").eq("user_id", user_id).eq("status", "approved").execute()
-        tickets = res_tickets.data
+        # 2. ሁሉንም ትኬቶች እና የክፍያ ሁኔታዎች ማምጣት
+        # የጸደቁ ትኬቶች
+        res_approved = supabase.table("tickets").select("ticket_number").eq("user_id", user_id).eq("status", "approved").execute()
+        # በመጠባበቅ ላይ ያሉ ክፍያዎች
+        res_pending = supabase.table("payments").select("id").eq("user_id", user_id).eq("status", "pending").execute()
+        # ውድቅ የተደረጉ ክፍያዎች
+        res_rejected = supabase.table("payments").select("id").eq("user_id", user_id).eq("status", "rejected").execute()
 
+        approved_tickets = res_approved.data
+        pending_count = len(res_pending.data)
+        rejected_count = len(res_rejected.data)
+
+        # 3. መልእክቱን በቋንቋ ማዘጋጀት (HTML Style)
         if lang == "am":
-            if not tickets:
-                text = "🛡 **የእርስዎ መረጃ**\n\nእስካሁን ምንም የቆረጡት ትኬት የለም።"
+            ticket_list = ""
+            if not approved_tickets:
+                ticket_list = "<i>እስካሁን ምንም የጸደቀ ትኬት የለም።</i>"
             else:
-                ticket_list = "\n• ".join([t['ticket_number'] for t in tickets])
-                text = f"👤 **የእርስዎ መረጃ**\n\n🆔 ID: `{user_id}`\n🎫 **የቆረጧቸው ትኬቶች፦**\n• {ticket_list}"
-        else:
-            if not tickets:
-                text = "🛡 **Your Info**\n\nYou haven't purchased any tickets yet."
-            else:
-                ticket_list = "\n• ".join([t['ticket_number'] for t in tickets])
-                text = f"👤 **Your Info**\n\n🆔 ID: `{user_id}`\n🎫 **Your Tickets:**\n• {ticket_list}"
+                ticket_list = "\n".join([f"• <code>{t['ticket_number']}</code> ✅" for t in approved_tickets])
 
-        await message.answer(text, parse_mode="Markdown")
+            status_info = ""
+            if pending_count > 0: status_info += f"\n⏳ <b>በመጠባበቅ ላይ፦</b> {pending_count} ክፍያ"
+            if rejected_count > 0: status_info += f"\n❌ <b>ውድቅ የተደረጉ፦</b> {rejected_count} ደረሰኝ"
+
+            text = (
+                f"👤 <b>የእኔ መረጃ</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📝 <b>ስም፦</b> {full_name}\n"
+                f"🔗 <b>Username፦</b> {username}\n"
+                f"📞 <b>ስልክ፦</b> <code>{phone}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎫 <b>የእርስዎ ትኬቶች፦</b>\n"
+                f"{ticket_list}\n"
+                f"{status_info}\n\n"
+                f"🍀 <b>መልካም እድል!</b>"
+            )
+        else:
+            ticket_list = ""
+            if not approved_tickets:
+                ticket_list = "<i>No approved tickets yet.</i>"
+            else:
+                ticket_list = "\n".join([f"• <code>{t['ticket_number']}</code> ✅" for t in approved_tickets])
+
+            status_info = ""
+            if pending_count > 0: status_info += f"\n⏳ <b>Pending:</b> {pending_count} payments"
+            if rejected_count > 0: status_info += f"\n❌ <b>Rejected:</b> {rejected_count} receipts"
+
+            text = (
+                f"👤 <b>My Info</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"📝 <b>Name:</b> {full_name}\n"
+                f"🔗 <b>Username:</b> {username}\n"
+                f"📞 <b>Phone:</b> <code>{phone}</code>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎫 <b>Your Tickets:</b>\n"
+                f"{ticket_list}\n"
+                f"{status_info}\n\n"
+                f"🍀 <b>Good Luck!</b>"
+            )
+
+        await message.answer(text, parse_mode="HTML")
 
     except Exception as e:
         print(f"Error in My Info: {e}")
-        await message.answer("ስህተት ተከስቷል፣ እባክዎ ቆይተው ይሞክሩ።")
+        error_msg = "❌ ስህተት ተከስቷል!" if lang == "am" else "❌ An error occurred!"
+        await message.answer(error_msg)
+    
+        
 
 @dp.message(F.text.in_({"🎁 አሸናፊዎች", "🎁 Winners"}))
 async def show_winners(message: types.Message):
