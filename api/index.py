@@ -537,6 +537,7 @@ async def my_info_handler(message: types.Message):
         error_msg = "❌ ስህተት ተከስቷል!" if lang == "am" else "❌ An error occurred!"
         await message.answer(error_msg)
 
+
 @dp.message(F.text.in_({"🎁 አሸናፊዎች", "🎁 Winners"}))
 async def show_winners(message: types.Message):
     user_id = message.from_user.id
@@ -546,8 +547,8 @@ async def show_winners(message: types.Message):
         res_user = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         lang = res_user.data[0].get('lang', 'en') if res_user.data else 'en'
 
-        # 2. አሸናፊዎችን ማምጣት (ከነ ተጠቃሚ መረጃቸው)
-        # Relationship ስህተት እንዳይፈጠር በጥንቃቄ የተጻፈ Query
+        # 2. አሸናፊዎችን ከነ ተጠቃሚ መረጃቸው መሳብ
+        # እዚህ ጋር Relationship ችግር ካለ 'Detailed Winners Error' ውስጥ ያሳየሃል
         res = supabase.table("winners").select(
             "ticket_number, round_no, prize_rank, user_id, users(username)"
         ).order("created_at", desc=True).limit(10).execute()
@@ -555,26 +556,17 @@ async def show_winners(message: types.Message):
         winners_list = res.data
 
         if not winners_list:
-            if lang == "am":
-                text = (
-                    "🏆 <b>አሸናፊዎች</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "እስካሁን ምንም አሸናፊ አልተመዘገበም።\n"
-                    "ቀጣዩ ባለዕድል እርስዎ ይሁኑ! 🍀"
-                )
-            else:
-                text = (
-                    "🏆 <b>Winners List</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                    "No winners recorded yet.\n"
-                    "Be the next lucky winner! 🍀"
-                )
+            text = (
+                "🏆 <b>አሸናፊዎች / Winners</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "እስካሁን ምንም አሸናፊ አልተመዘገበም።\n"
+                "No winners recorded yet. 🍀"
+            )
         else:
             header = "🏆 <b>የቅርብ ጊዜ አሸናፊዎች</b>\n" if lang == "am" else "🏆 <b>Recent Winners</b>\n"
             text = header + "━━━━━━━━━━━━━━━━━━━━━\n\n"
             
             for w in winners_list:
-                # የተጠቃሚ ስም አያያዝ (username ከሌለ 'User' እንዲል)
                 user_info = w.get('users')
                 username = f"@{user_info.get('username')}" if user_info and user_info.get('username') else "User"
                 
@@ -602,12 +594,17 @@ async def show_winners(message: types.Message):
         await message.answer(text, parse_mode="HTML")
 
     except Exception as e:
-        print(f"Detailed Winners Error: {e}")
-        # ለተጠቃሚው የሚታይ አጭር የስህተት መልእክት
-        msg = "❌ አሸናፊዎችን ማግኘት አልተቻለም።" if lang == "am" else "❌ Could not fetch winners."
-        await message.answer(msg)
-                
-        
+        # ስህተቱ በሚፈጠርበት ጊዜ ለተጠቃሚውም ለአንተም ግልጽ እንዲሆን
+        error_msg = (
+            "⚠️ <b>የሲስተም ስህተት አጋጥሟል!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔍 <b>Error Detail:</b>\n<code>{html.escape(str(e))}</code>\n\n"
+            "<i>እባክዎ ይህንን ስክሪንሻት ለአድሚኑ ይላኩ።</i>"
+        )
+        await message.answer(error_msg, parse_mode="HTML")
+        print(f"DEBUG ERROR: {e}") # ለ Vercel Log እንዲመች
+
+
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
 async def invite_friends_handler(message: types.Message):
     user_id = message.from_user.id
