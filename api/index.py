@@ -708,21 +708,61 @@ async def reject_payment(callback: types.CallbackQuery):
         
 
 # 5. ቋንቋ መቀየሪያ
+
+# --- 1. የቋንቋ ምርጫ ማሳያ ---
 @dp.message(F.text.in_({"🌐 ቋንቋ", "🌐 Language"}))
 async def show_language_options(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.add(types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"))
-    builder.add(types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en"))
-    await message.answer("ቋንቋ ይምረጡ / Choose language:", reply_markup=builder.as_markup())
+    # በተኖቹን በጎንና በጎን (Row) ለማድረግ
+    builder.row(
+        types.InlineKeyboardButton(text="አማርኛ 🇪🇹", callback_data="set_am"),
+        types.InlineKeyboardButton(text="English 🇺🇸", callback_data="set_en")
+    )
+    
+    welcome_text = (
+        "🌐 <b>ቋንቋ ይምረጡ / Choose Language</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "እባክዎ የሚፈልጉትን ቋንቋ ከታች ካሉት አማራጮች ይምረጡ።\n"
+        "Please select your preferred language from the options below."
+    )
+    
+    await message.answer(welcome_text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
+# --- 2. ምርጫውን መቀበያ እና ዳታቤዝ ማዘመኛ ---
 @dp.callback_query(F.data.startswith("set_"))
 async def handle_language_choice(callback: types.CallbackQuery):
     lang = callback.data.split("_")[1]
-    supabase.table("users").update({"lang": lang}).eq("user_id", callback.from_user.id).execute()
-    msg = "✅ ቋንቋ ተቀይሯል!" if lang == "am" else "✅ Language Updated!"
-    await callback.message.edit_text(msg)
-    await callback.message.answer(msg, reply_markup=get_main_menu(lang))
+    user_id = callback.from_user.id
+    
+    try:
+        # በዳታቤዝ ውስጥ ማዘመን
+        supabase.table("users").update({"lang": lang}).eq("user_id", user_id).execute()
+        
+        # የስኬት መልእክት በቋንቋው
+        if lang == "am":
+            success_msg = "✅ <b>ቋንቋው ወደ አማርኛ ተቀይሯል!</b>"
+            alert_msg = "አማርኛ ተመርጧል"
+        else:
+            success_msg = "✅ <b>Language has been set to English!</b>"
+            alert_msg = "English selected"
 
+        # የቀድሞውን የቋንቋ መምረጫ መልእክት ማጥፋት (Clean UI)
+        await callback.message.delete()
+        
+        # አዲሱን መልእክት ከአዲሱ ሜኑ ጋር መላክ
+        await callback.message.answer(
+            success_msg, 
+            reply_markup=get_main_menu(lang), 
+            parse_mode="HTML"
+        )
+        
+        # በትንሿ Notification (Toast) ማሳየት
+        await callback.answer(alert_msg)
+
+    except Exception as e:
+        print(f"Language Update Error: {e}")
+        await callback.answer("Error updating language", show_alert=True)
+        
 @dp.message(Command("broadcast"))
 async def enhanced_broadcast(message: types.Message):
     # 1. አድሚን መሆንህን ያረጋግጣል
