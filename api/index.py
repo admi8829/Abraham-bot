@@ -245,39 +245,52 @@ async def handle_contact(message: types.Message, state: FSMContext):
 # ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
-        # ሽልማቶችን ከዳታቤዝ ማምጣት
-        prizes_res = supabase.table("prizes").select("*").eq("lang", lang).execute()
+        # 1. ሽልማቶችን ከዳታቤዝ ማምጣት (ከፎቶው መዋቅር ጋር የተሳሰረ)
+        # ማሳሰቢያ፡ በዳታቤዝህ ላይ 'lang' የሚል ኮለም ካለ .eq("lang", lang) መጠቀም ትችላለህ
+        # ካለበለዚያ ሁሉንም አምጥቶ በኮድ መለየት ይሻላል
+        prizes_res = supabase.table("prizes").select("rank, amount").execute()
         prizes = prizes_res.data
         
         prize_list = ""
-        for p in prizes:
-            prize_list += f"🏆 {p['rank']} እጣ: **{p['amount']}**\n" if lang == "am" else f"🏆 {p['rank']} Prize: **{p['amount']}**\n"
+        # በደረጃቸው (Rank) ቅደም ተከተል እንዲቀመጡ
+        for p in sorted(prizes, key=lambda x: x['rank']):
+            r = p['rank']
+            amt = p['amount']
+            prize_list += f"🏆 <b>{r}</b> — {amt}\n"
 
+        # 2. Button ማዘጋጀት
         inline_kb = InlineKeyboardBuilder()
-        pay_btn_text = "💳 ክፍያ ፈጽም (Pay Now)" if lang == "am" else "💳 Pay Now"
-        inline_kb.button(text=pay_btn_text, callback_data="show_payment")
+        pay_btn_text = "💳 ክፍያ ፈጽም / Pay Now" # ለሁለቱም ቋንቋ እንዲሆን
+        inline_kb.row(types.InlineKeyboardButton(text=pay_btn_text, callback_data="show_payment"))
 
+        # 3. መልእክቱን በቋንቋ መለየት (HTML Style)
         if lang == "am":
             info_text = (
-                "✨ **የእለቱ የሽልማት ዝርዝር** ✨\n\n"
+                "🎁 <b>የእለቱ የሽልማት ዝርዝር</b> 🎁\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"{prize_list}\n"
-                "🎫 **የአንድ ትኬት ዋጋ: 50 ብር**\n\n"
-                "ለመቀጠል ከታች ያለውን የክፍያ ቁልፍ ይጫኑ፦"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ETB</code>\n\n"
+                "👉 <i>ለመቀጠል እና ትኬት ለመቁረጥ 'ክፍያ ፈጽም' የሚለውን ይጫኑ።</i>"
             )
         else:
             info_text = (
-                "✨ **Today's Prize List** ✨\n\n"
+                "🎁 <b>Today's Prize List</b> 🎁\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"{prize_list}\n"
-                "🎫 **Ticket Price: 50 ETB**\n\n"
-                "Click the button below to proceed to payment:"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "🎫 <b>Ticket Price:</b> <code>50 ETB</code>\n\n"
+                "👉 <i>Click 'Pay Now' below to buy your ticket and participate.</i>"
             )
 
-        await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="Markdown")
+        # 4. መልእክቱን መላክ
+        await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="HTML")
+
     except Exception as e:
         print(f"Error showing prizes: {e}")
-        error_msg = "ስህተት ተከስቷል፣ እባክዎ በድጋሚ ይሞክሩ።" if lang == "am" else "An error occurred, please try again."
+        error_msg = "❌ ስህተት ተከስቷል! / Error occurred!"
         await message.answer(error_msg)
-
+            
 # ሐ. የክፍያ መረጃ (Callback)
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery):
