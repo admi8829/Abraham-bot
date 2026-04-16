@@ -600,13 +600,18 @@ async def show_winners(message: types.Message):
             
             text += "\n🎉 <b>እንኳን ደስ አላችሁ!</b>" if lang == "am" else "\n🎉 <b>Congratulations!</b>"
 
-        await message.answer(text, parse_mode="HTML")
+        #await message.answer(text, parse_mode="HTML")
 
-    except Exception as e:
-        print(f"Error fetching winners: {e}")
-        error_msg = "❌ አሸናፊዎችን ማግኘት አልተቻለም።" if lang == "am" else "❌ Could not fetch winners."
-        await message.answer(error_msg)
-                
+   # except Exception as e:
+      #  print(f"Error fetching winners: {e}")
+       # error_msg = "❌ አሸናፊዎችን ማግኘት አልተቻለም።" if lang == "am" else "❌ Could not fetch winners."
+       # await message.answer(error_msg)
+        
+   except Exception as e:
+        print(f"Detailed Winners Error: {e}")
+        # ይህ ለተጠቃሚው ትክክለኛውን የሲስተም ስህተት ያሳያል
+        await message.answer(f"❌ Error Detail: <code>{e}</code>", parse_mode="HTML")
+    
         
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
 async def invite_friends_handler(message: types.Message):
