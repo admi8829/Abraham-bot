@@ -588,6 +588,7 @@ async def enhanced_broadcast(message: types.Message):
         f"🚫 የዘጉ (Blocked)፦ {blocked_count}\n"
         f"👥 ጠቅላላ ተጠቃሚ፦ {len(user_list)}"
     )
+  
 @dp.message(Command("draw"))
 async def professional_draw_handler(message: types.Message):
     # 1. የአድሚን ፍቃድ ቼክ (Security)
@@ -595,10 +596,10 @@ async def professional_draw_handler(message: types.Message):
         return
 
     GROUP_CHAT_ID = "-1003878868241" 
-    ADMIN_USERNAME = "your_admin_username" # ያንተ ዩዘር ኔም
+    ADMIN_USERNAME = "your_admin_username" # ያንተ ዩዘር ኔም (ያለ @)
 
     try:
-        # 2. ዳታዎችን ማምጣት (Tickets & Prizes)
+        # 2. ዳታዎችን ከዳታቤዝ ማምጣት
         ticket_res = supabase.table("tickets").select("*").eq("status", "approved").execute()
         prize_res = supabase.table("prizes").select("rank, amount").execute()
         
@@ -609,7 +610,7 @@ async def professional_draw_handler(message: types.Message):
             await message.answer("⚠️ <b>ምንም የጸደቀ ትኬት የለም።</b>", parse_mode="HTML")
             return
 
-        # 3. የእድል ስሌት (Weighted Draw - ብዙ የቆረጠ እድሉ ይሰፋል)
+        # 3. የእድል ብዛት ስሌት (Weighted Draw)
         all_candidates = [t['user_id'] for t in all_tickets]
         unique_users_count = len(set(all_candidates))
 
@@ -619,9 +620,12 @@ async def professional_draw_handler(message: types.Message):
 
         # 4. የቆጠራ Animation (Countdown)
         status_msg = await bot.send_message(GROUP_CHAT_ID, "🎰 <b>የዕጣ ዝግጅት ተጀምሯል... / Draw Started...</b>", parse_mode="HTML")
-        for anim in ["🕒 <b>3...</b>", "🕑 <b>2...</b>", "🕐 <b>1...</b>", "🚀 <b>እጣው እየወጣ ነው... / Drawing...</b>"]:
+        for anim in ["🕒 <b>3...</b>", "🕑 <b>2...</b>", "🕐 <b>1...</b>", "🚀 <b>እጣው እየወጣ ነው...</b>"]:
             await asyncio.sleep(1.5)
             await status_msg.edit_text(f"🎲 <b>ዕድለኛውን እየፈለግን ነው...</b>\n\n{anim}", parse_mode="HTML")
+        
+        # ቆጠራው ሲያልቅ የመግቢያ መልእክቱን ማጥፋት
+        await bot.delete_message(GROUP_CHAT_ID, status_msg.message_id)
 
         # 5. 3 አሸናፊዎችን መምረጥ (ያለ መደጋገም)
         winner_uids = []
@@ -634,20 +638,13 @@ async def professional_draw_handler(message: types.Message):
 
         ranks_display = ["1ኛ 🥇", "2ኛ 🥈", "3ኛ 🥉"]
         db_ranks = ["1ኛ", "2ኛ", "3ኛ"] 
-        
-        # የግሩፕ ካርድ መጀመሪያ (Card Design)
-        summary_card = (
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎊 <b>የዛሬው የዕጣ ውጤት / TODAY'S DRAW</b> 🎊\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        )
 
         for i, uid in enumerate(winner_uids):
             rank_label = ranks_display[i]
             rank_key = db_ranks[i]
             prize_amount = all_prizes.get(rank_key, "ሽልማት/Prize")
 
-            # የተጠቃሚ መረጃ (User Profile)
+            # የተጠቃሚ መረጃ
             u_res = supabase.table("users").select("*").eq("user_id", uid).execute()
             user_data = u_res.data[0]
             u_name = html.escape(user_data['username'] or user_data['full_name'])
@@ -666,44 +663,57 @@ async def professional_draw_handler(message: types.Message):
             }).execute()
             supabase.table("tickets").update({"status": "winner"}).eq("ticket_number", t_num).execute()
 
-            # 7. Inbox መልእክት (Multi-language)
-            inbox_builder = InlineKeyboardBuilder()
-            btn_text = "📞 አድሚን ያነጋግሩ / Contact Admin"
-            inbox_builder.row(types.InlineKeyboardButton(text=btn_text, url=f"https://t.me/{ADMIN_USERNAME}"))
+            # 7. Button ማዘጋጀት (Contact & Buy)
+            builder = InlineKeyboardBuilder()
+            builder.row(types.InlineKeyboardButton(text="📞 አድሚን / Contact", url=f"https://t.me/{ADMIN_USERNAME}"))
+            builder.row(types.InlineKeyboardButton(text="🎫 ትኬት ቁረጥ / Buy Ticket", callback_data="buy_ticket"))
 
+            # 8. መልእክቱን ማዘጋጀት (Inbox Style)
+            # ለአሸናፊው Inbox የሚላክ
             if u_lang == 'am':
-                inbox_txt = (f"🎁 <b>እንኳን ደስ አለዎት!</b>\nእርስዎ የ <b>{rank_label}</b> አሸናፊ ሆነዋል!\n"
-                             f"💰 ሽልማት: {prize_amount}\n🎫 ትኬት: <code>{t_num}</code>")
+                msg_txt = (f"🎁 <b>እንኳን ደስ አለዎት!</b> 🎁\n"
+                           f"━━━━━━━━━━━━━━━━━━━━\n"
+                           f"እርስዎ የ <b>{rank_label}</b> አሸናፊ ሆነዋል!\n\n"
+                           f"💰 <b>ሽልማት:</b> {prize_amount}\n"
+                           f"🎫 <b>ትኬት:</b> <code>{t_num}</code>\n"
+                           f"━━━━━━━━━━━━━━━━━━━━\n"
+                           f"📢 <i>ሽልማትዎን ለመቀበል አድሚኑን ያነጋግሩ።</i>")
             else:
-                inbox_txt = (f"🎁 <b>Congratulations!</b>\nYou won the <b>{rank_label}</b> prize!\n"
-                             f"💰 Prize: {prize_amount}\n🎫 Ticket: <code>{t_num}</code>")
+                msg_txt = (f"🎁 <b>Congratulations!</b> 🎁\n"
+                           f"━━━━━━━━━━━━━━━━━━━━\n"
+                           f"You won the <b>{rank_label}</b> prize!\n\n"
+                           f"💰 <b>Prize:</b> {prize_amount}\n"
+                           f"🎫 <b>Ticket:</b> <code>{t_num}</code>\n"
+                           f"━━━━━━━━━━━━━━━━━━━━\n"
+                           f"📢 <i>Contact admin to claim your prize.</i>")
 
+            # ለግሩፕ የሚላክ (Amharic & English በአንድ ላይ)
+            group_msg = (f"🎊 <b>የዕጣ አሸናፊ / DRAW WINNER</b> 🎊\n"
+                         f"━━━━━━━━━━━━━━━━━━━━\n"
+                         f"👤 <b>አሸናፊ:</b> @{u_name}\n"
+                         f"🏅 <b>ደረጃ / Rank:</b> {rank_label}\n"
+                         f"🎁 <b>ሽልማት / Prize:</b> {prize_amount}\n"
+                         f"🎫 <b>ትኬት / Ticket:</b> <code>{t_num}</code>\n"
+                         f"━━━━━━━━━━━━━━━━━━━━\n"
+                         f"✨ <i>እንኳን ደስ አለዎት! / Congratulations!</i>")
+
+            # 9. መልእክቶቹን መላክ
+            # ወደ Inbox
             try:
-                await bot.send_message(uid, inbox_txt, reply_markup=inbox_builder.as_markup(), parse_mode="HTML")
+                await bot.send_message(uid, msg_txt, reply_markup=builder.as_markup(), parse_mode="HTML")
             except:
-                await message.answer(f"⚠️ <b>Block ማሳሰቢያ:</b> @{u_name} ቦቱን ዘግቷል።")
+                await message.answer(f"⚠️ <b>ማሳሰቢያ:</b> @{u_name} ቦቱን Block ስላደረገ Inbox አልደረሰውም።")
+            
+            # ወደ ግሩፕ
+            await bot.send_message(GROUP_CHAT_ID, group_msg, reply_markup=builder.as_markup(), parse_mode="HTML")
+            await asyncio.sleep(1) # በየመካከሉ ትንሽ እረፍት (ለማሳመር)
 
-            # 8. የግሩፕ ካርድ ዝርዝር (Group Display)
-            summary_card += (
-                f"👤 <b>አሸናፊ:</b> @{u_name}\n"
-                f"🏅 <b>ደረጃ:</b> {rank_label}\n"
-                f"🎁 <b>ሽልማት:</b> {prize_amount}\n"
-                f"🎫 <b>ትኬት:</b> <code>{t_num}</code>\n"
-                f"┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n"
-            )
-
-        # 9. የዙር ማጠናቀቂያ (Clean Up & Marketing Button)
+        # 10. የዙር ማጠናቀቂያ (Clean Up)
         supabase.table("tickets").update({"status": "expired"}).eq("status", "approved").execute()
-
-        group_builder = InlineKeyboardBuilder()
-        group_builder.row(types.InlineKeyboardButton(text="🎫 ትኬት ቁረጥ / Buy Ticket", callback_data="buy_ticket"))
-        group_builder.row(types.InlineKeyboardButton(text="👤 አድሚን / Contact Admin", url=f"https://t.me/{ADMIN_USERNAME}"))
-
-        summary_card += "\n✨ <b>እንኳን ደስ አላችሁ! / Congratulations!</b>\n━━━━━━━━━━━━━━━━━━━━━"
-        await status_msg.edit_text(summary_card, reply_markup=group_builder.as_markup(), parse_mode="HTML")
-        await message.answer("✅ <b>የዕጣ ማውጫው በስኬት ተጠናቋል። / Draw Complete.</b>", parse_mode="HTML")
+        await message.answer("✅ <b>የዕጣ ማውጫው በስኬት ተጠናቋል።</b>", parse_mode="HTML")
 
     except Exception as e:
+        print(f"Draw Error: {e}")
         await message.answer(f"❌ <b>Error:</b> <code>{e}</code>", parse_mode="HTML")
 
         
