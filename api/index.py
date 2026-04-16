@@ -537,8 +537,6 @@ async def my_info_handler(message: types.Message):
         error_msg = "❌ ስህተት ተከስቷል!" if lang == "am" else "❌ An error occurred!"
         await message.answer(error_msg)
 
-
-
 @dp.message(F.text.in_({"🎁 አሸናፊዎች", "🎁 Winners"}))
 async def show_winners(message: types.Message):
     user_id = message.from_user.id
@@ -548,11 +546,11 @@ async def show_winners(message: types.Message):
         res_user = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         lang = res_user.data[0].get('lang', 'en') if res_user.data else 'en'
 
-        # 2. የቅርብ ጊዜ 10 አሸናፊዎችን ከነ ዙራቸው እና ከነ እጣ ደረጃቸው ማምጣት
-        # ማሳሰቢያ፡ 'round_no' እና 'prize_rank' በቴብልህ ውስጥ መኖራቸውን አረጋግጥ
+        # 2. አሸናፊዎችን ማምጣት (ከነ ተጠቃሚ መረጃቸው)
+        # Relationship ስህተት እንዳይፈጠር በጥንቃቄ የተጻፈ Query
         res = supabase.table("winners").select(
-            "ticket_number, draw_date, round_no, prize_rank, users(username, full_name)"
-        ).order("draw_date", desc=True).limit(10).execute()
+            "ticket_number, round_no, prize_rank, user_id, users(username)"
+        ).order("created_at", desc=True).limit(10).execute()
         
         winners_list = res.data
 
@@ -576,12 +574,13 @@ async def show_winners(message: types.Message):
             text = header + "━━━━━━━━━━━━━━━━━━━━━\n\n"
             
             for w in winners_list:
-                # ስም እና ዩዘርኔም ማዘጋጀት
-                user_info = w.get('users', {})
-                username = f"@{user_info.get('username')}" if user_info.get('username') else "User"
-                ticket = w['ticket_number']
-                round_no = w.get('round_no', '1') # Default round 1
-                rank = w.get('prize_rank', '1') # 1ኛ እጣ፣ 2ኛ እጣ...
+                # የተጠቃሚ ስም አያያዝ (username ከሌለ 'User' እንዲል)
+                user_info = w.get('users')
+                username = f"@{user_info.get('username')}" if user_info and user_info.get('username') else "User"
+                
+                ticket = w.get('ticket_number', 'N/A')
+                round_no = w.get('round_no', '1')
+                rank = w.get('prize_rank', '1')
                 
                 if lang == "am":
                     text += (
@@ -600,18 +599,14 @@ async def show_winners(message: types.Message):
             
             text += "\n🎉 <b>እንኳን ደስ አላችሁ!</b>" if lang == "am" else "\n🎉 <b>Congratulations!</b>"
 
-        #await message.answer(text, parse_mode="HTML")
+        await message.answer(text, parse_mode="HTML")
 
-   # except Exception as e:
-      #  print(f"Error fetching winners: {e}")
-       # error_msg = "❌ አሸናፊዎችን ማግኘት አልተቻለም።" if lang == "am" else "❌ Could not fetch winners."
-       # await message.answer(error_msg)
-        
-   except Exception as e:
+    except Exception as e:
         print(f"Detailed Winners Error: {e}")
-        # ይህ ለተጠቃሚው ትክክለኛውን የሲስተም ስህተት ያሳያል
-        await message.answer(f"❌ Error Detail: <code>{e}</code>", parse_mode="HTML")
-    
+        # ለተጠቃሚው የሚታይ አጭር የስህተት መልእክት
+        msg = "❌ አሸናፊዎችን ማግኘት አልተቻለም።" if lang == "am" else "❌ Could not fetch winners."
+        await message.answer(msg)
+                
         
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
 async def invite_friends_handler(message: types.Message):
