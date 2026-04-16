@@ -294,16 +294,43 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
 # ሐ. የክፍያ መረጃ (Callback)
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery):
-    res_lang = supabase.table("users").select("lang").eq("user_id", callback.from_user.id).execute()
-    lang = res_lang.data[0].get('lang', 'am') if res_lang.data else 'am'
+    # 1. የተጠቃሚውን ቋንቋ ከዳታቤዝ ማግኘት
+    try:
+        res_lang = supabase.table("users").select("lang").eq("user_id", callback.from_user.id).execute()
+        lang = res_lang.data[0].get('lang', 'en') if res_lang.data else 'en'
+    except:
+        lang = 'en'
+
+    # ለመክፈያነት የሚውለው ስልክ ቁጥር (እዚህ ጋር ያንተን ቁጥር ተካው)
+    PAYMENT_PHONE = "09XXXXXXXX"
 
     if lang == "am":
-        text = "💳 **የክፍያ መመሪያ**\n\nበ Telebirr (09XXXXXXXX) 50 ብር ይላኩ።\nከከፈሉ በኋላ ደረሰኙን (Screenshot) እዚህ ይላኩ።"
+        payment_text = (
+            "💳 <b>የክፍያ መመሪያ (Payment Steps)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<b>ደረጃ 1፦</b> በቴሌብር (Telebirr) <code>50 ETB</code> ይላኩ።\n\n"
+            f"📍 <b>የመክፈያ ስልክ ቁጥር፦</b> <code>{PAYMENT_PHONE}</code>\n"
+            "<i>(ቁጥሩን ለመገልበጥ ከላይ ያለውን ቁጥር ይጫኑት)</i>\n\n"
+            "<b>ደረጃ 2፦</b> ክፍያውን እንደፈጸሙ የክፍያውን ማረጋገጫ <b>ደረሰኝ (Screenshot)</b> እዚህ ቦት ላይ ይላኩ።\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <b>ማሳሰቢያ፦</b> ትክክለኛውን ደረሰኝ መላክዎን ያረጋግጡ። አድሚኖቻችን መረጃውን አረጋግጠው ትኬትዎን ይልካሉ።"
+        )
     else:
-        text = "💳 **Payment Instruction**\n\nPay 50 ETB via Telebirr (09XXXXXXXX).\nAfter payment, send the Screenshot here."
-    
-    await callback.message.answer(text, parse_mode="Markdown")
+        payment_text = (
+            "💳 <b>Payment Instruction</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<b>Step 1:</b> Send <code>50 ETB</code> via Telebirr.\n\n"
+            f"📍 <b>Payment Phone Number:</b> <code>{PAYMENT_PHONE}</code>\n"
+            "<i>(Tap the number above to copy it)</i>\n\n"
+            "<b>Step 2:</b> After payment, send the <b>Confirmation Receipt (Screenshot)</b> directly here to this bot.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <b>Notice:</b> Please ensure you send the correct screenshot. Our admins will verify and issue your ticket."
+        )
+
+    # 2. መልእክቱን መላክ (በ HTML)
+    await callback.message.answer(payment_text, parse_mode="HTML")
     await callback.answer()
+    
     
 
 # 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
