@@ -294,43 +294,52 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
 # ሐ. የክፍያ መረጃ (Callback)
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery):
-    # 1. የተጠቃሚውን ቋንቋ ከዳታቤዝ ማግኘት
     try:
         res_lang = supabase.table("users").select("lang").eq("user_id", callback.from_user.id).execute()
         lang = res_lang.data[0].get('lang', 'en') if res_lang.data else 'en'
     except:
         lang = 'en'
 
-    # ለመክፈያነት የሚውለው ስልክ ቁጥር (እዚህ ጋር ያንተን ቁጥር ተካው)
-    PAYMENT_PHONE = "09XXXXXXXX"
+    PAYMENT_PHONE = "09XXXXXXXX" # ያንተን ቁጥር እዚህ ተካ
+
+    # Button ማዘጋጀት
+    builder = InlineKeyboardBuilder()
+    copy_label = "📋 Copy Number" if lang == "en" else "📋 ቁጥሩን ገልብጥ"
+    # ቁጥሩን ብቻ የያዘ Callback እንዲሆን (ለኮፒ እንዲመች)
+    builder.row(types.InlineKeyboardButton(text=copy_label, callback_data=f"copy_num_{PAYMENT_PHONE}"))
 
     if lang == "am":
-        payment_text = (
-            "💳 <b>የክፍያ መመሪያ (Payment Steps)</b>\n"
+        text = (
+            "💳 <b>የክፍያ መመሪያ</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<b>ደረጃ 1፦</b> በቴሌብር (Telebirr) <code>50 ETB</code> ይላኩ።\n\n"
-            f"📍 <b>የመክፈያ ስልክ ቁጥር፦</b> <code>{PAYMENT_PHONE}</code>\n"
-            "<i>(ቁጥሩን ለመገልበጥ ከላይ ያለውን ቁጥር ይጫኑት)</i>\n\n"
-            "<b>ደረጃ 2፦</b> ክፍያውን እንደፈጸሙ የክፍያውን ማረጋገጫ <b>ደረሰኝ (Screenshot)</b> እዚህ ቦት ላይ ይላኩ።\n\n"
+            "<b>ደረጃ 1፦</b> በቴሌብር <code>50 ETB</code> ይላኩ።\n\n"
+            f"📍 <b>የመክፈያ ቁጥር፦</b> <code>{PAYMENT_PHONE}</code>\n\n"
+            "<b>ደረጃ 2፦</b> ክፍያውን እንደፈጸሙ <b>ደረሰኙን (Screenshot)</b> እዚህ ይላኩ።\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚠️ <b>ማሳሰቢያ፦</b> ትክክለኛውን ደረሰኝ መላክዎን ያረጋግጡ። አድሚኖቻችን መረጃውን አረጋግጠው ትኬትዎን ይልካሉ።"
+            "👇 <i>ቁጥሩን በቀላሉ ለመገልበጥ ከታች ያለውን ቁልፍ ይጫኑ።</i>"
         )
     else:
-        payment_text = (
+        text = (
             "💳 <b>Payment Instruction</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
             "<b>Step 1:</b> Send <code>50 ETB</code> via Telebirr.\n\n"
-            f"📍 <b>Payment Phone Number:</b> <code>{PAYMENT_PHONE}</code>\n"
-            "<i>(Tap the number above to copy it)</i>\n\n"
-            "<b>Step 2:</b> After payment, send the <b>Confirmation Receipt (Screenshot)</b> directly here to this bot.\n\n"
+            f"📍 <b>Payment Number:</b> <code>{PAYMENT_PHONE}</code>\n\n"
+            "<b>Step 2:</b> After payment, send the <b>Screenshot</b> here.\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚠️ <b>Notice:</b> Please ensure you send the correct screenshot. Our admins will verify and issue your ticket."
+            "👇 <i>Click the button below to copy the number easily.</i>"
         )
 
-    # 2. መልእክቱን መላክ (በ HTML)
-    await callback.message.answer(payment_text, parse_mode="HTML")
+    await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
     await callback.answer()
-    
+
+# --- ቁጥሩን ለብቻው 'Copyable' አድርጎ የሚልክ Handler ---
+@dp.callback_query(F.data.startswith("copy_num_"))
+async def copy_number_handler(callback: types.CallbackQuery):
+    num = callback.data.split("_")[2]
+    # ቁጥሩን ብቻ የያዘ መልእክት በ code format ይላካል
+    await callback.message.answer(f"<code>{num}</code>")
+    await callback.answer("Number sent! Tap it to copy.", show_alert=False)
+            
     
 
 # 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
