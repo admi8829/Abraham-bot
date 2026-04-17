@@ -94,12 +94,14 @@ async def start_handler(message: types.Message):
 
     # 2. Referral Logic (ከራሱ ሊንክ እንዳይገባ መከላከል)
     referrer_id = None
-    if message.text and len(message.text.split()) > 1:
+    # message.text መኖሩን እና በ /start መጀመሩን ብቻ ቼክ እናደርጋለን
+    if message.text and message.text.startswith("/start") and len(message.text.split()) > 1:
         ref_arg = message.text.split()[1]
         if ref_arg.isdigit():
             temp_referrer = int(ref_arg)
             if temp_referrer != user_id:
                 referrer_id = temp_referrer
+    
 
     # 3. Database Registration (Secure Query Logic)
     try:
@@ -174,10 +176,12 @@ async def check_join_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     if await is_member(user_id):
         await callback.message.delete()
+        # ጽሁፉን ወደ /start በመቀየር start_handler-ን በቀጥታ መጥራት
         callback.message.text = "/start" 
         await start_handler(callback.message)
     else:
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
+        
 
 
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
