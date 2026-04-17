@@ -550,7 +550,7 @@ async def show_winners(message: types.Message):
 
         # 2. አሸናፊዎችን ከነ ተጠቃሚ መረጃቸው መሳብ
         # እዚህ ጋር Relationship ችግር ካለ 'Detailed Winners Error' ውስጥ ያሳየሃል
-        res = supabase.table("winners").select(
+        res = supabase.table("winner ልጀምር").select(
             "ticket_number, round_no, prize_rank, user_id, users(username)"
         ).order("created_at", desc=True).limit(10).execute()
         
