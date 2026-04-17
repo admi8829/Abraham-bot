@@ -2,6 +2,7 @@ import os
 import asyncio
 import random
 import html  # ለጸዳ የጽሁፍ አቀራረብ (Formatting)
+from aiogram.enums import ChatAction # ይህ ከላይ ከ import ጋር ይግባ
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -74,6 +75,7 @@ def get_start_inline():
 # --- 6. Handler---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
+    bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     user_id = message.from_user.id
     # የተጠቃሚውን ስም ከ HTML ስህተት ነፃ በሆነ መልኩ መያዝ
     user_full_name = html.escape(message.from_user.full_name)
