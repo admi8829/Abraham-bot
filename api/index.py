@@ -183,37 +183,52 @@ async def check_join_callback(callback: types.CallbackQuery):
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
+    # 0. Typing effect (ለተጠቃሚው ቦቱ እየሰራ መሆኑን ለማሳየት)
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    
     user_id = message.from_user.id
     
-    # የተጠቃሚውን መረጃ ከዳታቤዝ ማምጣት
     try:
-        res = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
-        user_data = res.data[0] if res.data else {"lang": "am", "phone": None}
+        # 1. ሱፓቤዝ ጥሪ - select("lang, phone") ብቻ በመጠቀም (Selective Query)
+        res = supabase.table("users").select("lang, phone").eq("user_id", user_id).execute()
+        
+        # 2. ተጠቃሚው ዳታቤዝ ውስጥ ከሌለ (Not Found) ወደ /start እንዲመለስ ማድረግ
+        if not res.data:
+            return await message.answer("⚠️ Please /start the bot first! / እባክዎ መጀመሪያ ቦቱን ያስጀምሩ ( /start )።")
+            
+        user_data = res.data[0]
+        lang = user_data.get('lang', 'en')
+        phone = user_data.get('phone')
+
+        # 3. ስልኩ ቀድሞ ካለ በቀጥታ ወደ ክፍያ ማለፍ
+        if phone:
+            return await show_prizes_and_pay(message, lang)
+
+        # 4. ስልኩ ከሌለ State ሴት ማድረግ
+        await state.set_state(LotteryStates.waiting_for_phone)
+
+        # 5. እንደ ቋንቋው የሚቀያየር Button ጽሁፍ
+        btn_text = "📲 ስልክ ቁጥርዎን ያጋሩ" if lang == "am" else "📲 Share Contact Number"
+        kb = ReplyKeyboardBuilder()
+        kb.row(types.KeyboardButton(text=btn_text, request_contact=True))
+        
+        # 6. ማራኪ መልእክት
+        if lang == "am":
+            text = "🔐 <b>የደህንነት ማረጋገጫ</b>\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
+        else:
+            text = "🔐 <b>Security Verification</b>\n\nPlease share your contact first. This helps us contact you if you win."
+        
+        await message.answer(
+            text, 
+            reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True), 
+            parse_mode="HTML"
+        )
+
     except Exception as e:
-        print(f"DB Error: {e}")
-        user_data = {"lang": "am", "phone": None}
-
-    lang = user_data.get('lang', 'am')
-    phone = user_data.get('phone')
-
-    # 2. ስልኩ ቀድሞ ካለ በቀጥታ ወደ ሽልማት ዝርዝር ማለፍ
-    if phone:
-        await show_prizes_and_pay(message, lang)
-        return
-
-    # 3. ስልኩ ከሌለ State ሴት እናደርጋለን (ቦቱ ስልክ እየጠበቀ መሆኑን እንዲያውቅ)
-    await state.set_state(LotteryStates.waiting_for_phone)
-
-    kb_builder = ReplyKeyboardBuilder()
-    kb_builder.row(types.KeyboardButton(text="📲 ስልክ ቁጥርህን አጋራ / Share Contact", request_contact=True))
-    
-    if lang == "am":
-        text = "🔐 <b>የደህንነት ማረጋገጫ</b>\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
-    else:
-        text = "🔐 <b>Security Verification</b>\n\nPlease share your contact first to buy a ticket. This helps us call you if you win."
-    
-    await message.answer(text, reply_markup=kb_builder.as_markup(resize_keyboard=True, one_time_keyboard=True), parse_mode="HTML")
-
+        # ስህተት ቢፈጠር ለዲቨሎፐር ሪፖርት መላክ (ቀደም ብለን በሰራነው መሠረት)
+        await report_error_to_dev(message, e)
+        await message.answer("⚠️ Error occurred. Please try again later.")
+        
 # 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል
 # --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል (የተስተካከለ) ---
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
