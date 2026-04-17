@@ -65,13 +65,6 @@ def get_main_menu(lang="am"):
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
 
-def get_start_inline():
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🌐 Website", url="https://yourwebsite.com"))
-    builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
-    builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
-    return builder.as_markup()
-
 # --- 6. Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
@@ -88,7 +81,7 @@ async def start_handler(message: types.Message):
         
         join_text = (
             f"👋 <b>Welcome {user_full_name}!</b>\n\n"
-            "⚠️ <b>Access Denied!</b>\n"
+            "⚠️ <b>Access Link Denied!</b>\n"
             "To use this bot and participate in our lottery, you must join our official channel first.\n\n"
             "<i>This helps you stay updated with winners and news!</i>"
         )
@@ -126,8 +119,26 @@ async def start_handler(message: types.Message):
                 except: pass
         else:
             user_lang = res.data[0].get('lang', 'en')
+            
     except Exception as e:
-        print(f"DB Error: {e}")
+        # --- DEVELOPER ERROR REPORTING ---
+        import traceback
+        full_error = traceback.format_exc()
+        DEVELOPER_ID = os.getenv("DEVELOPER_ID")
+        
+        if DEVELOPER_ID:
+            dev_msg = (
+                f"🚨 <b>START HANDLER ERROR</b>\n"
+                f"👤 User: {user_full_name} (<code>{user_id}</code>)\n"
+                f"⚠️ Error: <code>{html.escape(str(e))}</code>\n"
+                f"🔍 Trace:\n<code>{html.escape(full_error[:3000])}</code>"
+            )
+            try:
+                await bot.send_message(DEVELOPER_ID, dev_msg, parse_mode="HTML")
+            except:
+                pass
+        
+        # ስህተት ቢኖርም ተጠቃሚው እንዳይቆም በ default lang እንዲቀጥል
         user_lang = 'en'
 
     # 4. Welcome Message (ማራኪ እና ጽዱ ዲዛይን)
@@ -161,7 +172,7 @@ async def check_join_callback(callback: types.CallbackQuery):
         await start_handler(callback.message)
     else:
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
-        
+
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
