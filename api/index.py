@@ -87,7 +87,7 @@ async def start_handler(message: types.Message):
         
         join_text = (
             f"👋 <b>Welcome {user_full_name}!</b>\n\n"
-            "⚠️ <b>Access Denied!</b>\n"
+            "⚠️ <b>Access Link description Denied!</b>\n"
             "To use this bot and participate in our lottery, you must join our official channel first.\n\n"
             "<i>This helps you stay updated with winners and news!</i>"
         )
