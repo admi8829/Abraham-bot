@@ -172,17 +172,32 @@ async def start_handler(message: types.Message):
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
     await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
-    
     user_id = callback.from_user.id
+    
     if await is_member(user_id):
+        # 1. መግባቱን ስላረጋገጥን የቆየውን መልእክት እናጥፋ
         await callback.message.delete()
-        # ጽሁፉን ወደ /start በመቀየር start_handler-ን በቀጥታ መጥራት
-        callback.message.text = "/start" 
-        await start_handler(callback.message)
+        
+        # 2. ዳታቤዝ ውስጥ መኖሩን እና ቋንቋውን ማረጋገጥ
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        
+        if res.data:
+            user_lang = res.data[0].get('lang', 'en')
+            # በቀጥታ ዋናውን ሜኑ አሳይ (start_handler-ን ከመጥራት ይልቅ)
+            if user_lang == "am":
+                welcome_text = "✨ <b>እንኳን ተመለሱ!</b> ✨\n\nአሁን ቦቱን መጠቀም ይችላሉ።"
+            else:
+                welcome_text = "✨ <b>Welcome Back!</b> ✨\n\nYou can now use the bot."
+            
+            await callback.message.answer(welcome_text, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+        else:
+            # ዳታቤዝ ውስጥ ከሌለ (አዲስ ከሆነ) ወደ start_handler መላክ
+            callback.message.text = "/start"
+            await start_handler(callback.message)
     else:
+        # ካልገባ ማስጠንቀቂያ መስጠት
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
         
-
 
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
