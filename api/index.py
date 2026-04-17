@@ -73,9 +73,13 @@ def get_start_inline():
     return builder.as_markup()
 
 # --- 6. Handler---
+
+# --- 6. Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    # 0. "typing..." effect ለማሳየት
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    
     user_id = message.from_user.id
     # የተጠቃሚውን ስም ከ HTML ስህተት ነፃ በሆነ መልኩ መያዝ
     user_full_name = html.escape(message.from_user.full_name)
@@ -89,7 +93,7 @@ async def start_handler(message: types.Message):
         
         join_text = (
             f"👋 <b>Welcome {user_full_name}!</b>\n\n"
-            "⚠️ <b>Access habtamu Denied!</b>\n"
+            "⚠️ <b>Access Denied!</b>\n"
             "To use this bot and participate in our lottery, you must join our official channel first.\n\n"
             "<i>This helps you stay updated with winners and news!</i>"
         )
@@ -172,6 +176,9 @@ async def start_handler(message: types.Message):
 
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
+    # እዚህም ላይ typing effect መጨመር ትችላለህ
+    await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+    
     user_id = callback.from_user.id
     if await is_member(user_id):
         await callback.message.delete()
@@ -180,8 +187,7 @@ async def check_join_callback(callback: types.CallbackQuery):
         await start_handler(callback.message)
     else:
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
-                                           
-        
+                
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
