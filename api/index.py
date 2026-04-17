@@ -18,6 +18,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 BASE_URL = os.getenv("WEBHOOK_URL") 
 ADMIN_ID = os.getenv("ADMIN_ID") 
 CHANNEL_ID = -1003866954136  
+DEVELOPER_ID = os.getenv("DEVELOPER_ID")
 
 # --- 2. Initialization ---
 bot = Bot(token=TOKEN)
@@ -593,16 +594,27 @@ async def show_winners(message: types.Message):
 
         await message.answer(text, parse_mode="HTML")
 
-    except Exception as e:
-        # ስህተቱ በሚፈጠርበት ጊዜ ለተጠቃሚውም ለአንተም ግልጽ እንዲሆን
-        error_msg = (
-            "⚠️ <b>የሲስተም ስህተት አጋጥሟል!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔍 <b>Error Detail:</b>\n<code>{html.escape(str(e))}</code>\n\n"
-            "<i>እባክዎ ይህንን ስክሪንሻት ለአድሚኑ ይላኩ።</i>"
-        )
-        await message.answer(error_msg, parse_mode="HTML")
-        print(f"DEBUG ERROR: {e}") # ለ Vercel Log እንዲመች
+        except Exception as e:
+        # ሀ. ሙሉ የጥፋቱን ዝርዝር (Traceback) ማዘጋጀት
+        full_error = traceback.format_exc()
+        
+        # ለ. ለአንተ (ለዲቨሎፐሩ) መላክ
+        if DEVELOPER_ID:
+            dev_report = (
+                f"🚨 <b>Developer Alert: Winners Error</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔍 <b>Error:</b> <code>{html.escape(str(e))}</code>\n"
+                f"📄 <b>Trace:</b>\n<code>{html.escape(full_error[:3000])}</code>"
+            )
+            try:
+                # ይህ መስመር ነው DEVELOPER_ID-ን ተጠቅሞ መልእክቱን የሚልከው
+                await bot.send_message(DEVELOPER_ID, dev_report, parse_mode="HTML")
+            except Exception as send_err:
+                print(f"Error sending to dev: {send_err}")
+
+        # ሐ. ለተጠቃሚው ደግሞ አጭር መልእክት ብቻ ማሳየት
+        await message.answer("⚠️ ይቅርታ፣ ሲስተሙ ላይ ስህተት ተፈጥሯል። ለባለሙያ ሪፖርት ተልኳል።")
+    
 
 
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
