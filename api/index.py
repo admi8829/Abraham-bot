@@ -92,18 +92,22 @@ async def start_handler(message: types.Message):
         await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
         return
 
-    # 2. Referral Logic (ከራሱ ሊንክ እንዳይገባ መከላከል)
-    referrer_id = None
-    # message.text መኖሩን እና በ /start መጀመሩን ብቻ ቼክ እናደርጋለን
-    if message.text and message.text.startswith("/start") and len(message.text.split()) > 1:
-        ref_arg = message.text.split()[1]
-        if ref_arg.isdigit():
-            temp_referrer = int(ref_arg)
-            if temp_referrer != user_id:
-                referrer_id = temp_referrer
+    # referral 
     
-
-    # 3. Database Registration (Secure Query Logic)
+    referrer_id = None
+    
+    # መልእክቱ መኖሩን፣ በ /start መጀመሩን እና የሪፈራል መለያ (Argument) መያዙን ቼክ ያደርጋል
+    if message.text and message.text.startswith("/start"):
+        parts = message.text.split()
+        if len(parts) > 1:
+            ref_arg = parts[1]
+            if ref_arg.isdigit():
+                temp_referrer = int(ref_arg)
+                # ተጠቃሚው ራሱን ሪፈር እንዳያደርግ መከላከል
+                if temp_referrer != user_id:
+                    referrer_id = temp_referrer
+                    
+ # 3. Database Registration (Secure Query Logic)
     try:
         # ለደህንነት ሲባል lang እና referred_by ብቻ ነው የተጠሩት
         res = supabase.table("users").select("lang, referred_by").eq("user_id", user_id).execute()
