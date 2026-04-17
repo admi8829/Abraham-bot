@@ -65,14 +65,6 @@ def get_main_menu(lang="am"):
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
 
-def get_start_inline():
-    builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🌐 Website", url="https://yourwebsite.com"))
-    builder.row(types.InlineKeyboardButton(text="📺 YouTube", url="https://youtube.com/@yourchannel"))
-    builder.row(types.InlineKeyboardButton(text="📞 Contact Us", url="https://t.me/your_admin_username"))
-    return builder.as_markup()
-
-# --- 6. Handler---
 
 # --- 6. Handlers ---
 @dp.message(Command("start"))
@@ -109,9 +101,10 @@ async def start_handler(message: types.Message):
             if temp_referrer != user_id:
                 referrer_id = temp_referrer
 
-    # 3. Database Registration (Default: English)
+    # 3. Database Registration (Secure Query Logic)
     try:
-        res = supabase.table("users").select("*").eq("user_id", user_id).execute()
+        # ለደህንነት ሲባል lang እና referred_by ብቻ ነው የተጠሩት
+        res = supabase.table("users").select("lang, referred_by").eq("user_id", user_id).execute()
         
         if not res.data:
             # አዲስ ተጠቃሚ ሲመዘገብ Default 'en' (English) እንዲሆን
@@ -119,7 +112,7 @@ async def start_handler(message: types.Message):
                 "user_id": user_id, 
                 "username": username,
                 "full_name": user_full_name,
-                "lang": 'en', # ተቀይሯል ወደ English
+                "lang": 'en',
                 "referred_by": referrer_id,
                 "phone": None
             }).execute()
@@ -176,18 +169,17 @@ async def start_handler(message: types.Message):
 
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
-    # እዚህም ላይ typing effect መጨመር ትችላለህ
     await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
     
     user_id = callback.from_user.id
     if await is_member(user_id):
         await callback.message.delete()
-        # ለ start_handler አርቲፊሻል ሜሴጅ መፍጠር
         callback.message.text = "/start" 
         await start_handler(callback.message)
     else:
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
-                
+
+
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
