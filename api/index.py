@@ -216,54 +216,62 @@ async def buy_ticket_step1(message: types.Message, state: FSMContext):
         # ስህተት ቢፈጠር ለዲቨሎፐር ሪፖርት መላክ (ቀደም ብለን በሰራነው መሠረት)
         await report_error_to_dev(message, e)
         await message.answer("⚠️ Error occurred. Please try again later.")
-        
-# 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል
-# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል (የተስተካከለ) ---
+
+# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
 async def handle_contact(message: types.Message, state: FSMContext):
+    # 0. "typing..." effect
+    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    
     user_id = message.from_user.id
     phone = message.contact.phone_number
-    full_name = html.escape(message.from_user.full_name)
-    username = message.from_user.username or "User"
     
     try:
-        # 1. መጀመሪያ በ Update ለመሞከር (ተጠቃሚው ቀድሞ በ /start ተመዝግቦ ከሆነ)
-        update_res = supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+        # 1. ስልኩን በ Update ማሳደስ (ከዚህ በፊት በ /start መመዝገባቸው ስለሚጠበቅ)
+        # Selective select በመጠቀም ቋንቋውንም አብሮ ማምጣት (ለፍጥነት)
+        update_res = supabase.table("users").update({"phone": phone}).eq("user_id", user_id).select("lang").execute()
         
-        # 2. Update ካልሰራ (ተጠቃሚው በሆነ ምክንያት ዳታቤዝ ውስጥ ካልተገኘ) አዲስ እንመዘግባለን
-        if not update_res.data:
-            supabase.table("users").upsert({
+        if update_res.data:
+            # ተጠቃሚው ቀድሞ ስለነበረ ቋንቋውን ከዳታቤዝ እንወስዳለን
+            user_lang = update_res.data[0].get('lang', 'en')
+        else:
+            # 2. ተጠቃሚው በሆነ ምክንያት በ /start ካልተመዘገበ አዲስ መመዝገብ (Fallback)
+            full_name = html.escape(message.from_user.full_name)
+            username = message.from_user.username or "User"
+            
+            supabase.table("users").insert({
                 "user_id": user_id,
                 "username": username,
                 "full_name": full_name,
                 "phone": phone,
-                "lang": 'am'
+                "lang": 'en'
             }).execute()
+            user_lang = 'en'
         
-        # 3. የቋንቋ ምርጫውን ከዳታቤዝ እናምጣ (ካልተገኘ 'am' እንጠቀማለን)
-        lang_res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        lang = lang_res.data[0].get('lang', 'am') if lang_res.data else 'am'
-
-        # 4. ለተጠቃሚው ማረጋገጫ መስጠት
-        if lang == "am":
+        # 3. ለተጠቃሚው ማረጋገጫ መስጠት (በመረጠው ቋንቋ)
+        if user_lang == "am":
             success_msg = "✅ <b>ስልክዎ በትክክል ተመዝግቧል!</b>"
         else:
             success_msg = "✅ <b>Your phone has been registered!</b>"
             
-        await message.answer(success_msg, reply_markup=get_main_menu(lang), parse_mode="HTML") 
-
-        # 5. ስቴቱን ማጽዳት (ስልክ መቀበል ስለጨረስን)
+        # 4. ስቴቱን ማጽዳት (ከReply Markup መውጣት እንዲችል)
         await state.clear()
+        
+        # 5. ማረጋገጫውን ከዋናው ሜኑ ጋር መላክ
+        await message.answer(success_msg, reply_markup=get_main_menu(user_lang), parse_mode="HTML") 
 
-        # 6. በቀጥታ ወደ ሽልማት እና ክፍያ ዝርዝር መውሰድ
-        await show_prizes_and_pay(message, lang)
+        # 6. በቀጥታ ወደ ሽልማት እና ክፍያ ዝርዝር መውሰድ (ተጠቃሚው እንዳይሰለች)
+        await show_prizes_and_pay(message, user_lang)
         
     except Exception as e:
-        # ስህተት ካለ እዚህ ጋር ይታያል
-        print(f"❌ Error in handle_contact: {e}")
-        error_text = "⚠️ ይቅርታ፣ ስልክዎን መመዝገብ አልተቻለም። እባክዎ ትንሽ ቆይተው እንደገና ይሞክሩ።"
-        await message.answer(error_text)
+        # 7. ማንኛውም ስህተት ለ Developer ID ሪፖርት ይደረጋል
+        await report_error_to_dev(f"🚨 <b>CONTACT REGISTRATION ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>")
         
+        # ለተጠቃሚው የሚሰጥ ምላሽ
+        error_text = "⚠️ ይቅርታ፣ ስልክዎን መመዝገብ አልተቻለም። እባክዎ እንደገና ይሞክሩ።"
+        await message.answer(error_text)
+
+
 # ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
