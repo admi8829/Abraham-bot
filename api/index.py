@@ -66,16 +66,20 @@ def get_main_menu(lang="am"):
     return kb.as_markup(resize_keyboard=True)
 
 # --- 6. Handlers ---
+
+
+# --- 6. Handlers ---
+
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    # 0. "typing..." effect ለማሳየት
+    # 0. "typing..." effect
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     
     user_id = message.from_user.id
     user_full_name = html.escape(message.from_user.full_name)
     username = message.from_user.username or "User"
     
-    # 1. ሪፈራል ሎጂክ (በመጀመሪያው /start ጊዜ ብቻ እንዲመዘገብ)
+    # 1. ሪፈራል ሎጂክ (አዲስ ተጠቃሚ ከሆነ ለመመዝገብ)
     referrer_id = None
     if message.text and len(message.text.split()) > 1:
         parts = message.text.split()
@@ -84,91 +88,82 @@ async def start_handler(message: types.Message):
             if temp_ref != user_id:
                 referrer_id = temp_ref
 
-    # 2. ተጠቃሚውን መመዝገብ (ቋንቋውን 'en' አድርጎ)
+    # 2. Database Registration & Language Check
+    user_lang = 'en' # Default
     try:
-        # ለደህንነት ሲባል lang ብቻ ነው የተጠራው (Selective Select)
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         
         if not res.data:
+            # አዲስ ተጠቃሚ ከሆነ መመዝገብ
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username,
                 "full_name": user_full_name,
                 "lang": 'en',
-                "referred_by": referrer_id,
-                "phone": None
+                "referred_by": referrer_id
             }).execute()
             
             if referrer_id:
-                try: 
-                    await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined using your link.", parse_mode="HTML")
+                try: await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined.", parse_mode="HTML")
                 except: pass
+        else:
+            # ነባር ተጠቃሚ ከሆነ ቋንቋውን መውሰድ
+            user_lang = res.data[0].get('lang', 'en')
     except Exception as e:
-        # --- DEVELOPER ERROR REPORTING ---
         DEVELOPER_ID = os.getenv("DEVELOPER_ID")
         if DEVELOPER_ID:
-            full_error = traceback.format_exc()
-            dev_msg = f"🚨 <b>DB START ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>"
-            try: await bot.send_message(DEVELOPER_ID, dev_msg, parse_mode="HTML")
+            try: await bot.send_message(DEVELOPER_ID, f"🚨 <b>DB Error:</b> {html.escape(str(e))}", parse_mode="HTML")
             except: pass
 
-    # 3. ሁልጊዜ መጀመሪያ የቻናል መቀላቀያውን ብቻ ማሳየት
-    kb = InlineKeyboardBuilder()
-    kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-    kb.row(types.InlineKeyboardButton(text="🔄 I have joined", callback_data="check_join"))
+    # 3. የቻናል አባልነት ቼክ (እዚህ ጋር ነው ለውጡ!)
+    is_joined = await is_member(user_id)
     
-    join_text = (
-        f"👋 <b>Welcome {user_full_name}!</b>\n\n"
-        "⚠️ <b>Access Denied!</b>\n"
-        "To use this bot and participate in our lottery, you must join our official channel first.\n\n"
-        "<i>Once you join, click the button below!</i>"
-    )
-    await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+    if not is_joined:
+        # አባል ካልሆነ ብቻ የ Join መልእክት አሳይ
+        kb = InlineKeyboardBuilder()
+        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
+        kb.row(types.InlineKeyboardButton(text="🔄 I have joined", callback_data="check_join"))
+        
+        join_text = (
+            f"👋 <b>Welcome {user_full_name}!</b>\n\n"
+            "⚠️ <b>Access Denied!</b>\n"
+            "To use this bot and participate in our lottery, you must join our official channel first."
+        )
+        return await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+
+    # 4. አባል ከሆነ በቀጥታ ወደ Main Menu (Welcome Message)
+    if user_lang == "am":
+        welcome_text = (
+            f"✨ <b>ሰላም {user_full_name}!</b> ✨\n\n"
+            f"እንኳን ወደ <b>E-Lottery</b> ትኬት መቁረጫ በደህና መጡ።\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ። 🍀"
+        )
+    else:
+        welcome_text = (
+            f"✨ <b>Hello {user_full_name}!</b> ✨\n\n"
+            f"Welcome to <b>E-Lottery</b> Ticket Bot.\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes. 🍀"
+        )
+
+    await message.answer(welcome_text, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
 
 
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
-    # 0. ወዲያውኑ ምላሽ ስጥ ("Trying..." ምልክቱ እንዲጠፋ)
-    await callback.answer()
-    
-    # "typing..." effect
-    await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
-    
+    await callback.answer() # ሰዓቷን ለማጥፋት
     user_id = callback.from_user.id
-    user_full_name = html.escape(callback.from_user.full_name)
     
     if await is_member(user_id):
-        # 1. የቆየውን "Join Channel" መልእክት አጥፋ
+        # መግባቱን ካረጋገጠ የቆየውን መልእክት አጥፍቶ start_handlerን በድጋሚ መጥራት
+        # አሁን start_handler መግባቱን ስላረጋገጠ በቀጥታ ወደ ሜኑ ይወስደዋል
         try: await callback.message.delete()
         except: pass
         
-        # 2. የቋንቋ መረጃ ከዳታቤዝ በደህንነት ማምጣት
-        try:
-            res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-            user_lang = res.data[0].get('lang', 'en') if res.data else 'en'
-        except:
-            user_lang = 'en'
-
-        # 3. ተጠቃሚው ሲመለስ የሚያየው ማራኪ መልእክት (Welcome Back)
-        if user_lang == "am":
-            welcome_text = (
-                f"✨ <b>እንኳን በደህና ተመለሱ {user_full_name}!</b> ✨\n\n"
-                f"አሁን የ <b>E-Lottery</b> አገልግሎቶችን መጠቀም ይችላሉ።\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ። 🍀"
-            )
-        else:
-            welcome_text = (
-                f"✨ <b>Welcome Back {user_full_name}!</b> ✨\n\n"
-                f"You can now use <b>E-Lottery</b> services.\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes. 🍀"
-            )
-
-        # 4. ዋናውን ሜኑ መላክ
-        await callback.message.answer(welcome_text, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+        callback.message.text = "/start"
+        await start_handler(callback.message)
     else:
-        # ገና ካልገባ ማስጠንቀቂያ መስጠት
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
