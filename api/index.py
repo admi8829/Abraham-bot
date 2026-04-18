@@ -65,24 +65,18 @@ def get_main_menu(lang="am"):
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
     
-
-# --- 6. Handlers ---
-
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    # 0. "typing..." effect
+    # 0. "typing..." effect - ቦቱ እየሰራ መሆኑን ለማሳየት
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     
     user_id = message.from_user.id
     user_full_name = html.escape(message.from_user.full_name)
     username = message.from_user.username or "User"
     
-    # 1. መጀመሪያ ተጠቃሚው ቻናል ውስጥ መኖሩን ቼክ ማድረግ (አንዴ Join ካለ ወደ Menu እንዲሄድ)
-    is_joined = await is_member(user_id)
-    
-    # 2. ሪፈራል እና ምዝገባ (መጀመሪያ ቢመዘገብም ባይመዘገብም ሎጂኩ ይካሄዳል)
+    # 1. Database Registration & Language Check
     try:
-        # ለደህንነት እና ለፍጥነት lang ብቻ መጥራት
+        # ለፍጥነት 'lang' ብቻ መጥራት
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         user_exists = len(res.data) > 0
         user_lang = res.data[0].get('lang', 'en') if user_exists else 'en'
@@ -106,63 +100,55 @@ async def start_handler(message: types.Message):
             }).execute()
             
             if referrer_id:
-                try: await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined.", parse_mode="HTML")
+                try: 
+                    await bot.send_message(
+                        referrer_id, 
+                        f"🎉 <b>New Referral!</b>\n{user_full_name} has joined using your link.", 
+                        parse_mode="HTML"
+                    )
                 except: pass
     except Exception as e:
-        # DB Error ሪፖርት ለ Admin
-        await report_to_admin(f"🚨 <b>DB Registration Error</b>\nUser: {user_id}\nError: {html.escape(str(e))}")
+        # ስህተት ካለ ለ Admin ሪፖርት ያደርጋል
+        ADMIN_ID = os.getenv("DEVELOPER_ID")
+        if ADMIN_ID:
+            try: await bot.send_message(ADMIN_ID, f"🚨 <b>DB Error:</b> {html.escape(str(e))}")
+            except: pass
         user_lang = 'en'
 
-    # 3. ቻናል ካልገባ ብቻ የ Join መልእክት አሳይ
-    if not is_joined:
-        kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-        kb.row(types.InlineKeyboardButton(text="🔄 I have joined", callback_data="check_join"))
-        
-        join_text = (
-            f"👋 <b>Welcome {user_full_name}!</b>\n\n"
-            "⚠️ <b>Access Denied!</b>\n"
-            "To use this bot and participate in our lottery, you must join our official channel first."
-        )
-        return await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
-
-    # 4. ቻናል ገብቶ ከሆነ በቀጥታ ሜኑውን አሳይ
-    try:
-        main_menu_kb = get_main_menu(user_lang)
-        if user_lang == "am":
-            welcome_text = f"✨ <b>ሰላም {user_full_name}!</b> ✨\n\nእንኳን ወደ <b>E-Lottery</b> በደህና መጡ። መልካም ዕድል! 🍀"
-        else:
-            welcome_text = f"✨ <b>Hello {user_full_name}!</b> ✨\n\nWelcome to <b>E-Lottery</b> Bot. Good Luck! 🍀"
-        
-        await message.answer(welcome_text, reply_markup=main_menu_kb, parse_mode="HTML")
-    except Exception as e:
-        # ሜኑው ካልመጣ ለ Admin ሪፖርት ማድረግ
-        await report_to_admin(f"🚨 <b>Menu Display Error</b>\nUser: {user_id}\nError: {html.escape(str(e))}")
-        await message.answer("⚠️ Sorry, the menu is having issues. Admins are notified.")
-
-
-@dp.callback_query(F.data == "check_join")
-async def check_join_callback(callback: types.CallbackQuery):
-    await callback.answer()
-    user_id = callback.from_user.id
+    # 2. ማራኪ የአቀባበል ገጽ (Welcome Page with Channel Button)
+    kb = InlineKeyboardBuilder()
+    # የቻናል በተን (እንደ አማራጭ)
+    kb.row(types.InlineKeyboardButton(text="📢 Join Our Official Channel", url="https://t.me/ethiouh"))
     
-    if await is_member(user_id):
-        try: await callback.message.delete()
-        except: pass
-        
-        # ቻናል መግባቱን ካረጋገጠ በኋላ start_handlerን በመጥራት ሜኑውን እንዲያገኝ ማድረግ
-        callback.message.text = "/start"
-        await start_handler(callback.message)
+    if user_lang == "am":
+        welcome_text = (
+            f"✨ <b>ሰላም {user_full_name}!</b> ✨\n\n"
+            f"እንኳን ወደ <b>E-Lottery</b> ትኬት መቁረጫ በደህና መጡ።\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ።\n\n"
+            f"👇 መረጃዎችን ለማግኘት ቻናላችንን ይቀላቀሉ!"
+        )
     else:
-        await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
+        welcome_text = (
+            f"✨ <b>Hello {user_full_name}!</b> ✨\n\n"
+            f"Welcome to <b>E-Lottery</b> Ticket Bot.\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes.\n\n"
+            f"👇 Join our channel to stay updated!"
+        )
 
-async def report_to_admin(error_msg: str):
-    """ለአድሚን ስህተቶችን ሪፖርት ማድረጊያ ረዳት ተግባር"""
-    ADMIN_ID = os.getenv("DEVELOPER_ID") # ወይም ቀጥታ ቁጥር መጻፍ ትችላለህ
-    if ADMIN_ID:
-        try: await bot.send_message(ADMIN_ID, error_msg, parse_mode="HTML")
-        except: pass
-        
+    # 3. መልእክቱን ከነ ማራኪ በተኑ መላክ
+    # ማሳሰቢያ፡ እዚህ ጋር reply_markup ላይ get_main_menu(user_lang) እና kb.as_markup() አንድ ላይ አይላኩም
+    # ስለዚህ መጀመሪያ አቀባበሉን ከቻናል በተን ጋር እንልካለን፣ በመቀጠል ዋናውን ሜኑ (Reply Keyboard) እናሳያለን።
+    
+    await message.answer(welcome_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+    
+    # 4. ዋናውን ሜኑ (Reply Keyboard) ወዲያውኑ ማሳየት
+    await message.answer(
+        "የሚፈልጉትን አገልግሎት ይምረጡ / Choose a service:" if user_lang == "en" else "የሚፈልጉትን አገልግሎት ይምረጡ፦",
+        reply_markup=get_main_menu(user_lang)
+    )
+    
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
