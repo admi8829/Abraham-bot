@@ -66,10 +66,9 @@ def get_main_menu(lang="am"):
     return kb.as_markup(resize_keyboard=True)
 
 # --- 6. Handlers ---
-# --- 6. Handlers ---
-
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
+    # 0. "typing..." effect ለማሳየት
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     
     user_id = message.from_user.id
@@ -79,25 +78,39 @@ async def start_handler(message: types.Message):
     # 1. ሪፈራል ሎጂክ (በመጀመሪያው /start ጊዜ ብቻ እንዲመዘገብ)
     referrer_id = None
     if message.text and len(message.text.split()) > 1:
-        ref_arg = message.text.split()[1]
-        if ref_arg.isdigit() and int(ref_arg) != user_id:
-            referrer_id = int(ref_arg)
+        parts = message.text.split()
+        if parts[1].isdigit():
+            temp_ref = int(parts[1])
+            if temp_ref != user_id:
+                referrer_id = temp_ref
 
     # 2. ተጠቃሚውን መመዝገብ (ቋንቋውን 'en' አድርጎ)
     try:
-        res = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
+        # ለደህንነት ሲባል lang ብቻ ነው የተጠራው (Selective Select)
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        
         if not res.data:
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username,
                 "full_name": user_full_name,
                 "lang": 'en',
-                "referred_by": referrer_id
+                "referred_by": referrer_id,
+                "phone": None
             }).execute()
+            
             if referrer_id:
-                try: await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined.")
+                try: 
+                    await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined using your link.", parse_mode="HTML")
                 except: pass
-    except: pass
+    except Exception as e:
+        # --- DEVELOPER ERROR REPORTING ---
+        DEVELOPER_ID = os.getenv("DEVELOPER_ID")
+        if DEVELOPER_ID:
+            full_error = traceback.format_exc()
+            dev_msg = f"🚨 <b>DB START ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>"
+            try: await bot.send_message(DEVELOPER_ID, dev_msg, parse_mode="HTML")
+            except: pass
 
     # 3. ሁልጊዜ መጀመሪያ የቻናል መቀላቀያውን ብቻ ማሳየት
     kb = InlineKeyboardBuilder()
@@ -115,21 +128,28 @@ async def start_handler(message: types.Message):
 
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
-    await callback.answer() # "Trying..." ምልክቱን ወዲያውኑ ለማጥፋት
+    # 0. ወዲያውኑ ምላሽ ስጥ ("Trying..." ምልክቱ እንዲጠፋ)
+    await callback.answer()
+    
+    # "typing..." effect
+    await bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+    
     user_id = callback.from_user.id
     user_full_name = html.escape(callback.from_user.full_name)
     
     if await is_member(user_id):
-        await callback.message.delete() # የቻናል መቀላቀያውን መልእክት ማጥፋት
+        # 1. የቆየውን "Join Channel" መልእክት አጥፋ
+        try: await callback.message.delete()
+        except: pass
         
-        # የቋንቋ መረጃ ከዳታቤዝ ማምጣት
+        # 2. የቋንቋ መረጃ ከዳታቤዝ በደህንነት ማምጣት
         try:
             res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
             user_lang = res.data[0].get('lang', 'en') if res.data else 'en'
         except:
             user_lang = 'en'
 
-        # 4. ተጠቃሚው ሲመለስ የሚያየው ማራኪ መልእክት (እዚህ ጋር ገባ)
+        # 3. ተጠቃሚው ሲመለስ የሚያየው ማራኪ መልእክት (Welcome Back)
         if user_lang == "am":
             welcome_text = (
                 f"✨ <b>እንኳን በደህና ተመለሱ {user_full_name}!</b> ✨\n\n"
@@ -145,12 +165,12 @@ async def check_join_callback(callback: types.CallbackQuery):
                 f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes. 🍀"
             )
 
-        # ዋናውን ሜኑ መላክ
+        # 4. ዋናውን ሜኑ መላክ
         await callback.message.answer(welcome_text, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
     else:
+        # ገና ካልገባ ማስጠንቀቂያ መስጠት
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
-
-
+        
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
