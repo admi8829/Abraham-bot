@@ -148,7 +148,7 @@ async def start_handler(message: types.Message):
         await message.answer(welcome_text, reply_markup=kb.as_markup(), parse_mode="HTML")
         
         # ዋናውን ሜኑ መላክ (ከ get_main_menu ፋንክሽንህ የሚመጣ)
-        await message.answer("👇 <b>Main Menu / ዋና ማውጫ</b>", reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+      #  await message.answer("👇 <b>Main Menu / ዋና ማውጫ</b>", reply_markup=get_main_menu(user_lang), parse_mode="HTML")
         
     except Exception as e:
         # ሜኑው ካልመጣ ለ Developer ID ሪፖርት ማድረግ
