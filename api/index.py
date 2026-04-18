@@ -142,33 +142,30 @@ async def start_handler(message: types.Message):
             f"<i>Note: Stay updated by joining our channel below.</i> 🍀"
         )
 
-    # 3. መልእክቱን እና ዋናውን ሜኑ (Reply Keyboard) መላክ
+
+        # 3. አቀባበሉን እና ሜኑውን በአንድ ላይ መላክ
     try:
-        # የአቀባበል ገጹን መላክ
-        await message.answer(welcome_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+        # የአቀባበል ገጹን ከ "Join" Inline Button ጋር ማዘጋጀት
+        # Inline Keyboard (Join Channel)
+        kb = InlineKeyboardBuilder()
+        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
         
-        # ዋናውን ሜኑ መላክ (ከ get_main_menu ፋንክሽንህ የሚመጣ)
-       await message.answer(".", reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+        # ዋናው ሜኑ (Reply Keyboard)
+        main_menu_kb = get_main_menu(user_lang)
+
+        # አሁን ሁለቱንም በአንድ ላይ እንልካለን (ጽሁፉን በማጥፋት)
+        await message.answer(
+            welcome_text, 
+            reply_markup=main_menu_kb, # ዋናው ሜኑ እዚህ ይገባል
+            parse_mode="HTML"
+        )
+        
+        # ቻናል መቀላቀያውን ደግሞ እንደ ሁለተኛ መልእክት ወይም እዚሁ ላይ በ Inline መላክ ትችላለህ
+        # ነገር ግን የ Reply Menu (ከስር የሚቀመጠው) እንዲመጣ ከፈለግክ ከላይ ባለው መልኩ ይበቃል
         
     except Exception as e:
-        # ሜኑው ካልመጣ ለ Developer ID ሪፖርት ማድረግ
-        await report_error_to_dev(f"🚨 <b>UI/MENU ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>")
-        await message.answer("⚠️ System error. Developer notified.")
-
-# --- Error Reporting Function ---
-
-async def report_error_to_dev(msg: str):
-    """ሁሉንም ስህተቶች ለ Developer ID ሪፖርት ማድረጊያ"""
-    DEV_ID = os.getenv("DEVELOPER_ID") 
-    if DEV_ID:
-        try:
-            # የ Traceback (ሙሉ ስህተቱን) ማካተት ከፈለግክ
-            full_trace = html.escape(traceback.format_exc()[:1000])
-            final_msg = f"{msg}\n\n🔍 <b>Trace:</b>\n<code>{full_trace}</code>"
-            await bot.send_message(DEV_ID, final_msg, parse_mode="HTML")
-        except:
-            pass
-    
+        await report_error_to_dev(f"🚨 <b>UI/MENU ERROR</b>\nUser: {user_id}\nError: {html.escape(str(e))}")
+        
                         
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
