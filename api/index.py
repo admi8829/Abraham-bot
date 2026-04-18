@@ -172,10 +172,10 @@ async def check_join_callback(callback: types.CallbackQuery, state: FSMContext):
     
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
+# 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
-    # 0. Typing effect (ለተጠቃሚው ቦቱ እየሰራ መሆኑን ለማሳየት)
-    await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+    # Trying effect ተነስቷል (ወዲያውኑ መልእክቱን እንዲልክ)
     
     user_id = message.from_user.id
     
@@ -183,7 +183,7 @@ async def buy_ticket_step1(message: types.Message, state: FSMContext):
         # 1. ሱፓቤዝ ጥሪ - select("lang, phone") ብቻ በመጠቀም (Selective Query)
         res = supabase.table("users").select("lang, phone").eq("user_id", user_id).execute()
         
-        # 2. ተጠቃሚው ዳታቤዝ ውስጥ ከሌለ (Not Found) ወደ /start እንዲመለስ ማድረግ
+        # 2. ተጠቃሚው ዳታቤዝ ውስጥ ከሌለ ወደ /start እንዲመለስ ማድረግ
         if not res.data:
             return await message.answer("⚠️ Please /start the bot first! / እባክዎ መጀመሪያ ቦቱን ያስጀምሩ ( /start )።")
             
@@ -205,9 +205,17 @@ async def buy_ticket_step1(message: types.Message, state: FSMContext):
         
         # 6. ማራኪ መልእክት
         if lang == "am":
-            text = "🔐 <b>የደህንነት ማረጋገጫ</b>\n\nትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
+            text = (
+                "🔐 <b>የደህንነት ማረጋገጫ</b>\n\n"
+                "ትኬት ለመቁረጥ መጀመሪያ ስልክ ቁጥርዎን ማጋራት አለብዎት። "
+                "ይህ አሸናፊ ሲሆኑ በስልክ ለመደወል ይጠቅመናል።"
+            )
         else:
-            text = "🔐 <b>Security Verification</b>\n\nPlease share your contact first. This helps us contact you if you win."
+            text = (
+                "🔐 <b>Security Verification</b>\n\n"
+                "Please share your contact first. "
+                "This helps us contact you if you win."
+            )
         
         await message.answer(
             text, 
@@ -216,10 +224,11 @@ async def buy_ticket_step1(message: types.Message, state: FSMContext):
         )
 
     except Exception as e:
-        # ስህተት ቢፈጠር ለዲቨሎፐር ሪፖርት መላክ (ቀደም ብለን በሰራነው መሠረት)
-        await report_error_to_dev(message, e)
+        # ስህተት ቢፈጠር ለዲቨሎፐር ሪፖርት መላክ
+        # ማሳሰቢያ፡ report_error_to_dev የሚለው ፈንክሽን ከላይ መኖሩን አረጋግጥ
+        await report_error_to_dev(f"🚨 <b>TICKET START ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>")
         await message.answer("⚠️ Error occurred. Please try again later.")
-
+    
 # --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
 # --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
