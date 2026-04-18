@@ -64,41 +64,45 @@ def get_main_menu(lang="am"):
         kb.button(text="🌐 ቋንቋ")
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
-    
+
+
+# --- 6. Handlers ---
 @dp.message(Command("start"))
 async def start_handler(message: types.Message):
-    # 0. "typing..." effect - ቦቱ እየሰራ መሆኑን ለማሳየት
+    # 0. "typing..." effect - ቦቱ ሰብዓዊ እንዲመስል
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
     
     user_id = message.from_user.id
     user_full_name = html.escape(message.from_user.full_name)
     username = message.from_user.username or "User"
     
-    # 1. Database Registration & Language Check
+    # 1. Database & Referral Logic
     try:
-        # ለፍጥነት 'lang' ብቻ መጥራት
+        # ለፍጥነት እና ለደህንነት "lang" ብቻ መጥራት (Selective Select)
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
         user_exists = len(res.data) > 0
-        user_lang = res.data[0].get('lang', 'en') if user_exists else 'en'
-
+        
         if not user_exists:
-            # ሪፈራል መለያን መለየት
+            # ሪፈራል መለያን መለየት (ሊንክ ይዞ ከመጣ)
             referrer_id = None
             if message.text and len(message.text.split()) > 1:
                 parts = message.text.split()
                 if parts[1].isdigit() and int(parts[1]) != user_id:
                     referrer_id = int(parts[1])
 
-            # አዲስ ተጠቃሚ መመዝገብ
+            # አዲስ ተጠቃሚ መመዝገብ (Registration)
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username,
                 "full_name": user_full_name,
-                "lang": 'en',
+                "lang": 'en', # Default language
                 "referred_by": referrer_id,
                 "phone": None
             }).execute()
             
+            user_lang = 'en'
+            
+            # ለጋባዡ ሰው (Referrer) መልእክት መላክ
             if referrer_id:
                 try: 
                     await bot.send_message(
@@ -107,18 +111,19 @@ async def start_handler(message: types.Message):
                         parse_mode="HTML"
                     )
                 except: pass
+        else:
+            # ነባር ተጠቃሚ ከሆነ ቋንቋውን መውሰድ
+            user_lang = res.data[0].get('lang', 'en')
+
     except Exception as e:
-        # ስህተት ካለ ለ Admin ሪፖርት ያደርጋል
-        ADMIN_ID = os.getenv("DEVELOPER_ID")
-        if ADMIN_ID:
-            try: await bot.send_message(ADMIN_ID, f"🚨 <b>DB Error:</b> {html.escape(str(e))}")
-            except: pass
+        # ማንኛውም የዳታቤዝ ስህተት ለ Developer ID ይላካል
+        await report_error_to_dev(f"🚨 <b>DATABASE ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>")
         user_lang = 'en'
 
-    # 2. ማራኪ የአቀባበል ገጽ (Welcome Page with Channel Button)
+    # 2. ማራኪ የአቀባበል ገጽ (UI Design)
     kb = InlineKeyboardBuilder()
-    # የቻናል በተን (እንደ አማራጭ)
-    kb.row(types.InlineKeyboardButton(text="📢 Join Our Official Channel", url="https://t.me/ethiouh"))
+    # ቻናል መቀላቀያ በተን (Optional - ምርጫ ነው)
+    kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
     
     if user_lang == "am":
         welcome_text = (
@@ -126,7 +131,7 @@ async def start_handler(message: types.Message):
             f"እንኳን ወደ <b>E-Lottery</b> ትኬት መቁረጫ በደህና መጡ።\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ።\n\n"
-            f"👇 መረጃዎችን ለማግኘት ቻናላችንን ይቀላቀሉ!"
+            f"<i>ማሳሰቢያ፦ ለአዳዲስ መረጃዎች ቻናላችንን መቀላቀል ይችላሉ።</i> 🍀"
         )
     else:
         welcome_text = (
@@ -134,21 +139,37 @@ async def start_handler(message: types.Message):
             f"Welcome to <b>E-Lottery</b> Ticket Bot.\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes.\n\n"
-            f"👇 Join our channel to stay updated!"
+            f"<i>Note: Stay updated by joining our channel below.</i> 🍀"
         )
 
-    # 3. መልእክቱን ከነ ማራኪ በተኑ መላክ
-    # ማሳሰቢያ፡ እዚህ ጋር reply_markup ላይ get_main_menu(user_lang) እና kb.as_markup() አንድ ላይ አይላኩም
-    # ስለዚህ መጀመሪያ አቀባበሉን ከቻናል በተን ጋር እንልካለን፣ በመቀጠል ዋናውን ሜኑ (Reply Keyboard) እናሳያለን።
+    # 3. መልእክቱን እና ዋናውን ሜኑ (Reply Keyboard) መላክ
+    try:
+        # የአቀባበል ገጹን መላክ
+        await message.answer(welcome_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+        
+        # ዋናውን ሜኑ መላክ (ከ get_main_menu ፋንክሽንህ የሚመጣ)
+        await message.answer("👇 <b>Main Menu / ዋና ማውጫ</b>", reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+        
+    except Exception as e:
+        # ሜኑው ካልመጣ ለ Developer ID ሪፖርት ማድረግ
+        await report_error_to_dev(f"🚨 <b>UI/MENU ERROR</b>\n👤 User: {user_id}\n⚠️ Error: <code>{html.escape(str(e))}</code>")
+        await message.answer("⚠️ System error. Developer notified.")
+
+# --- Error Reporting Function ---
+
+async def report_error_to_dev(msg: str):
+    """ሁሉንም ስህተቶች ለ Developer ID ሪፖርት ማድረጊያ"""
+    DEV_ID = os.getenv("DEVELOPER_ID") 
+    if DEV_ID:
+        try:
+            # የ Traceback (ሙሉ ስህተቱን) ማካተት ከፈለግክ
+            full_trace = html.escape(traceback.format_exc()[:1000])
+            final_msg = f"{msg}\n\n🔍 <b>Trace:</b>\n<code>{full_trace}</code>"
+            await bot.send_message(DEV_ID, final_msg, parse_mode="HTML")
+        except:
+            pass
     
-    await message.answer(welcome_text, reply_markup=kb.as_markup(), parse_mode="HTML")
-    
-    # 4. ዋናውን ሜኑ (Reply Keyboard) ወዲያውኑ ማሳየት
-    await message.answer(
-        "የሚፈልጉትን አገልግሎት ይምረጡ / Choose a service:" if user_lang == "en" else "የሚፈልጉትን አገልግሎት ይምረጡ፦",
-        reply_markup=get_main_menu(user_lang)
-    )
-    
+                        
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
