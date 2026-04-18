@@ -276,96 +276,96 @@ async def handle_contact(message: types.Message, state: FSMContext):
         await message.answer(error_text)
         
 
-# ሽልማቶችን የሚያሳይ እና የክፍያ በተን የሚልክ ረዳት ፈንክሽን
+# --- 7. Prize & Payment Flow ---
+
 async def show_prizes_and_pay(message: types.Message, lang: str):
+    """ሽልማቶችን ዘርዝሮ የክፍያ በተን ያሳያል"""
     try:
-        # 1. ሽልማቶችን ከዳታቤዝ ማምጣት (ከፎቶው መዋቅር ጋር የተሳሰረ)
-        # ማሳሰቢያ፡ በዳታቤዝህ ላይ 'lang' የሚል ኮለም ካለ .eq("lang", lang) መጠቀም ትችላለህ
-        # ካለበለዚያ ሁሉንም አምጥቶ በኮድ መለየት ይሻላል
-        prizes_res = supabase.table("prizes").select("rank, amount").execute()
-        prizes = prizes_res.data
+        # 1. Optimized DB call
+        res = supabase.table("prizes").select("rank, amount").execute()
+        prizes = res.data or []
+        
+        # ሽልማቶችን በደረጃቸው (Rank) መደርደር
+        sorted_prizes = sorted(prizes, key=lambda x: x['rank'])
         
         prize_list = ""
-        # በደረጃቸው (Rank) ቅደም ተከተል እንዲቀመጡ
-        for p in sorted(prizes, key=lambda x: x['rank']):
-            r = p['rank']
-            amt = p['amount']
-            prize_list += f"🏆 <b>{r}</b> — {amt}\n"
+        if not sorted_prizes:
+            prize_list = "⏳ No prizes listed yet." if lang == "en" else "⏳ ሽልማቶች ገና አልተገለጹም።"
+        else:
+            for p in sorted_prizes:
+                prize_list += f"🏆 <b>{p['rank']} ደረጃ:</b> <code>{p['amount']}</code>\n"
 
-        # 2. Button ማዘጋጀት
+        # 2. UI Design
         inline_kb = InlineKeyboardBuilder()
-        pay_btn_text = "💳 ክፍያ ፈጽም / Pay Now" # ለሁለቱም ቋንቋ እንዲሆን
-        inline_kb.row(types.InlineKeyboardButton(text=pay_btn_text, callback_data="show_payment"))
+        btn_txt = "💳 ክፍያ ፈጽም / Pay Now"
+        inline_kb.row(types.InlineKeyboardButton(text=btn_txt, callback_data="show_payment"))
 
-        # 3. መልእክቱን በቋንቋ መለየት (HTML Style)
         if lang == "am":
-            info_text = (
+            text = (
                 "🎁 <b>የእለቱ የሽልማት ዝርዝር</b> 🎁\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"{prize_list}\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ETB</code>\n\n"
-                "👉 <i>ለመቀጠል እና ትኬት ለመቁረጥ 'ክፍያ ፈጽም' የሚለውን ይጫኑ።</i>"
+                "✨ <i>እድለኛ ይሁኑ! አሁኑኑ ትኬት በመቁረጥ በዕጣው ይሳተፉ።</i>"
             )
         else:
-            info_text = (
+            text = (
                 "🎁 <b>Today's Prize List</b> 🎁\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"{prize_list}\n"
                 "━━━━━━━━━━━━━━━━━━━━━\n"
                 "🎫 <b>Ticket Price:</b> <code>50 ETB</code>\n\n"
-                "👉 <i>Click 'Pay Now' below to buy your ticket and participate.</i>"
+                "✨ <i>Join now and stand a chance to win big!</i>"
             )
 
-        # 4. መልእክቱን መላክ
-        await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="HTML")
+        await message.answer(text, reply_markup=inline_kb.as_markup(), parse_mode="HTML")
 
     except Exception as e:
-        print(f"Error showing prizes: {e}")
-        error_msg = "❌ ስህተት ተከስቷል! / Error occurred!"
-        await message.answer(error_msg)
-            
-# ሐ. የክፍያ መረጃ (Callback)
+        print(f"Prizes Error: {e}")
+        await message.answer("❌ ስህተት ተከስቷል!")
+
 @dp.callback_query(F.data == "show_payment")
-async def process_payment_info(callback: types.CallbackQuery):
-    # 1. የተጠቃሚውን ቋንቋ ከዳታቤዝ ማግኘት
-    try:
-        res_lang = supabase.table("users").select("lang").eq("user_id", callback.from_user.id).execute()
-        lang = res_lang.data[0].get('lang', 'en') if res_lang.data else 'en'
-    except:
-        lang = 'en'
-
-    # ለመክፈያነት የሚውለው ስልክ ቁጥር (እዚህ ጋር ያንተን ቁጥር ተካው)
-    PAYMENT_PHONE = "09XXXXXXXX"
-
-    if lang == "am":
-        payment_text = (
-            "💳 <b>የክፍያ መመሪያ (Payment Steps)</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<b>ደረጃ 1፦</b> በቴሌብር (Telebirr) <code>50 ETB</code> ይላኩ።\n\n"
-            f"📍 <b>የመክፈያ ስልክ ቁጥር፦</b> <code>{PAYMENT_PHONE}</code>\n"
-            "<i>(ቁጥሩን ለመገልበጥ ከላይ ያለውን ቁጥር ይጫኑት)</i>\n\n"
-            "<b>ደረጃ 2፦</b> ክፍያውን እንደፈጸሙ የክፍያውን ማረጋገጫ <b>ደረሰኝ (Screenshot)</b> እዚህ ቦት ላይ ይላኩ።\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚠️ <b>ማሳሰቢያ፦</b> ትክክለኛውን ደረሰኝ መላክዎን ያረጋግጡ። አድሚኖቻችን መረጃውን አረጋግጠው ትኬትዎን ይልካሉ።"
-        )
-    else:
-        payment_text = (
-            "💳 <b>Payment Instruction</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "<b>Step 1:</b> Send <code>50 ETB</code> via Telebirr.\n\n"
-            f"📍 <b>Payment Phone Number:</b> <code>{PAYMENT_PHONE}</code>\n"
-            "<i>(Tap the number above to copy it)</i>\n\n"
-            "<b>Step 2:</b> After payment, send the <b>Confirmation Receipt (Screenshot)</b> directly here to this bot.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            "⚠️ <b>Notice:</b> Please ensure you send the correct screenshot. Our admins will verify and issue your ticket."
-        )
-
-    # 2. መልእክቱን መላክ (በ HTML)
-    await callback.message.answer(payment_text, parse_mode="HTML")
+async def process_payment_info(callback: types.CallbackQuery, state: FSMContext):
+    """የክፍያ መመሪያ ልኮ ቦቱን 'ደረሰኝ ጠባቂ' state ውስጥ ያስገባል"""
+    # 🚨 ቴሌግራም Loading ምልክት እንዳያሳይ ፈጣን ምላሽ
     await callback.answer()
     
-# 2. ስክሪንሻት መቀበያ (ለአድሚን መላኪያ)
+    user_id = callback.from_user.id
+    
+    # የተጠቃሚውን ቋንቋ ማግኘት
+    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    lang = res.data[0].get('lang', 'en') if res.data else 'en'
+
+    # 🚨 ቦቱ ደረሰኝ ለመቀበል ዝግጁ መሆኑን መግለጽ (CRITICAL)
+    await state.set_state(LotteryStates.waiting_for_receipt)
+
+    PAYMENT_PHONE = "09XXXXXXXX" # <-- እዚህ ጋር የራስህን ቁጥር ተካ
+
+    if lang == "am":
+        pay_text = (
+            "💳 <b>የክፍያ መመሪያ (Telebirr)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<b>ደረጃ 1፦</b> በቴሌብር <code>50 ETB</code> ይላኩ።\n"
+            f"📍 ስልክ፦ <code>{PAYMENT_PHONE}</code>\n"
+            "<i>(ቁጥሩን ለመገልበጥ ከላይ ያለውን ይጫኑት)</i>\n\n"
+            "<b>ደረጃ 2፦</b> ክፍያውን እንደፈጸሙ <b>የደረሰኝ ፎቶ (Screenshot)</b> እዚህ ቦት ላይ ይላኩ።\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <b>ማሳሰቢያ፦</b> አድሚኖቻችን ደረሰኙን ካረጋገጡ በኋላ ትኬትዎን ወዲያውኑ ይልካሉ።"
+        )
+    else:
+        pay_text = (
+            "💳 <b>Payment Guide (Telebirr)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "<b>Step 1:</b> Send <code>50 ETB</code> via Telebirr.\n"
+            f"📍 Phone: <code>{PAYMENT_PHONE}</code>\n"
+            "<i>(Tap to copy the number)</i>\n\n"
+            "<b>Step 2:</b> After paying, send the <b>Receipt Screenshot</b> here.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ <b>Notice:</b> Admins will verify your payment and issue your ticket shortly."
+        )
+
+    await callback.message.answer(pay_text, parse_mode="HTML")
 
 
 @dp.message(F.photo)
