@@ -64,9 +64,7 @@ def get_main_menu(lang="am"):
         kb.button(text="🌐 ቋንቋ")
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
-
-# --- 6. Handlers ---
-
+    
 
 # --- 6. Handlers ---
 
@@ -79,47 +77,44 @@ async def start_handler(message: types.Message):
     user_full_name = html.escape(message.from_user.full_name)
     username = message.from_user.username or "User"
     
-    # 1. ሪፈራል ሎጂክ (አዲስ ተጠቃሚ ከሆነ ለመመዝገብ)
-    referrer_id = None
-    if message.text and len(message.text.split()) > 1:
-        parts = message.text.split()
-        if parts[1].isdigit():
-            temp_ref = int(parts[1])
-            if temp_ref != user_id:
-                referrer_id = temp_ref
-
-    # 2. Database Registration & Language Check
-    user_lang = 'en' # Default
+    # 1. መጀመሪያ ተጠቃሚው ቻናል ውስጥ መኖሩን ቼክ ማድረግ (አንዴ Join ካለ ወደ Menu እንዲሄድ)
+    is_joined = await is_member(user_id)
+    
+    # 2. ሪፈራል እና ምዝገባ (መጀመሪያ ቢመዘገብም ባይመዘገብም ሎጂኩ ይካሄዳል)
     try:
+        # ለደህንነት እና ለፍጥነት lang ብቻ መጥራት
         res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        
-        if not res.data:
-            # አዲስ ተጠቃሚ ከሆነ መመዝገብ
+        user_exists = len(res.data) > 0
+        user_lang = res.data[0].get('lang', 'en') if user_exists else 'en'
+
+        if not user_exists:
+            # ሪፈራል መለያን መለየት
+            referrer_id = None
+            if message.text and len(message.text.split()) > 1:
+                parts = message.text.split()
+                if parts[1].isdigit() and int(parts[1]) != user_id:
+                    referrer_id = int(parts[1])
+
+            # አዲስ ተጠቃሚ መመዝገብ
             supabase.table("users").insert({
                 "user_id": user_id, 
                 "username": username,
                 "full_name": user_full_name,
                 "lang": 'en',
-                "referred_by": referrer_id
+                "referred_by": referrer_id,
+                "phone": None
             }).execute()
             
             if referrer_id:
                 try: await bot.send_message(referrer_id, f"🎉 <b>New Referral!</b>\n{user_full_name} has joined.", parse_mode="HTML")
                 except: pass
-        else:
-            # ነባር ተጠቃሚ ከሆነ ቋንቋውን መውሰድ
-            user_lang = res.data[0].get('lang', 'en')
     except Exception as e:
-        DEVELOPER_ID = os.getenv("DEVELOPER_ID")
-        if DEVELOPER_ID:
-            try: await bot.send_message(DEVELOPER_ID, f"🚨 <b>DB Error:</b> {html.escape(str(e))}", parse_mode="HTML")
-            except: pass
+        # DB Error ሪፖርት ለ Admin
+        await report_to_admin(f"🚨 <b>DB Registration Error</b>\nUser: {user_id}\nError: {html.escape(str(e))}")
+        user_lang = 'en'
 
-    # 3. የቻናል አባልነት ቼክ (እዚህ ጋር ነው ለውጡ!)
-    is_joined = await is_member(user_id)
-    
+    # 3. ቻናል ካልገባ ብቻ የ Join መልእክት አሳይ
     if not is_joined:
-        # አባል ካልሆነ ብቻ የ Join መልእክት አሳይ
         kb = InlineKeyboardBuilder()
         kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
         kb.row(types.InlineKeyboardButton(text="🔄 I have joined", callback_data="check_join"))
@@ -131,40 +126,43 @@ async def start_handler(message: types.Message):
         )
         return await message.answer(join_text, reply_markup=kb.as_markup(), parse_mode="HTML")
 
-    # 4. አባል ከሆነ በቀጥታ ወደ Main Menu (Welcome Message)
-    if user_lang == "am":
-        welcome_text = (
-            f"✨ <b>ሰላም {user_full_name}!</b> ✨\n\n"
-            f"እንኳን ወደ <b>E-Lottery</b> ትኬት መቁረጫ በደህና መጡ።\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 <b>እድለኛ ይሁኑ!</b> አሁኑኑ ትኬት በመቁረጥ የሽልማቱ ባለቤት ይሁኑ። 🍀"
-        )
-    else:
-        welcome_text = (
-            f"✨ <b>Hello {user_full_name}!</b> ✨\n\n"
-            f"Welcome to <b>E-Lottery</b> Ticket Bot.\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🎯 <b>Good Luck!</b> Buy a ticket now and stand a chance to win big prizes. 🍀"
-        )
-
-    await message.answer(welcome_text, reply_markup=get_main_menu(user_lang), parse_mode="HTML")
+    # 4. ቻናል ገብቶ ከሆነ በቀጥታ ሜኑውን አሳይ
+    try:
+        main_menu_kb = get_main_menu(user_lang)
+        if user_lang == "am":
+            welcome_text = f"✨ <b>ሰላም {user_full_name}!</b> ✨\n\nእንኳን ወደ <b>E-Lottery</b> በደህና መጡ። መልካም ዕድል! 🍀"
+        else:
+            welcome_text = f"✨ <b>Hello {user_full_name}!</b> ✨\n\nWelcome to <b>E-Lottery</b> Bot. Good Luck! 🍀"
+        
+        await message.answer(welcome_text, reply_markup=main_menu_kb, parse_mode="HTML")
+    except Exception as e:
+        # ሜኑው ካልመጣ ለ Admin ሪፖርት ማድረግ
+        await report_to_admin(f"🚨 <b>Menu Display Error</b>\nUser: {user_id}\nError: {html.escape(str(e))}")
+        await message.answer("⚠️ Sorry, the menu is having issues. Admins are notified.")
 
 
 @dp.callback_query(F.data == "check_join")
 async def check_join_callback(callback: types.CallbackQuery):
-    await callback.answer() # ሰዓቷን ለማጥፋት
+    await callback.answer()
     user_id = callback.from_user.id
     
     if await is_member(user_id):
-        # መግባቱን ካረጋገጠ የቆየውን መልእክት አጥፍቶ start_handlerን በድጋሚ መጥራት
-        # አሁን start_handler መግባቱን ስላረጋገጠ በቀጥታ ወደ ሜኑ ይወስደዋል
         try: await callback.message.delete()
         except: pass
         
+        # ቻናል መግባቱን ካረጋገጠ በኋላ start_handlerን በመጥራት ሜኑውን እንዲያገኝ ማድረግ
         callback.message.text = "/start"
         await start_handler(callback.message)
     else:
         await callback.answer("⚠️ You haven't joined the channel yet!", show_alert=True)
+
+async def report_to_admin(error_msg: str):
+    """ለአድሚን ስህተቶችን ሪፖርት ማድረጊያ ረዳት ተግባር"""
+    ADMIN_ID = os.getenv("DEVELOPER_ID") # ወይም ቀጥታ ቁጥር መጻፍ ትችላለህ
+    if ADMIN_ID:
+        try: await bot.send_message(ADMIN_ID, error_msg, parse_mode="HTML")
+        except: pass
+        
         
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
