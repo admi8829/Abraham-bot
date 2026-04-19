@@ -109,18 +109,21 @@ async def start_handler(message: types.Message, state: FSMContext):
 async def buy_ticket_step1(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
-    # 1. ቻናል መኖሩን ማረጋገጥ
+    # 1. ቻናል ውስጥ መኖሩን ቼክ ማድረግ
     if not await is_member(user_id):
-        return await check_channel_membership(message, state)
+        # ካልሆነ ወደ verify መልዕክት መላክ
+        kb = InlineKeyboardBuilder()
+        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
+        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+        return await message.answer("⚠️ ትኬት ለመቁረጥ መጀመሪያ ቻናላችንን መቀላቀል አለብዎት!", reply_markup=kb.as_markup())
 
-    # 2. ተጠቃሚው መመዝገቡን ቼክ ማድረግ (ስልኩ ከሌለ እንዲመዘገብ መላክ)
-    res = supabase.table("users").select("lang", "phone").eq("user_id", user_id).execute()
-    
-    if not res.data or not res.data[0].get('phone'):
-        await state.set_state(LotteryStates.waiting_for_phone)
-        return await message.answer("⚠️ ትኬት ለመቁረጥ መጀመሪያ ስልክዎን መመዝገብ አለብዎት። እባክዎ /start ይበሉ።")
+    # 2. ዳታቤዝ ውስጥ መኖሩን ቼክ ማድረግ
+    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    if not res.data:
+        return await message.answer("⚠️ እባክዎ መጀመሪያ /start ብለው ይመዝገቡ።")
 
-    lang = res.data[0]['lang'] if res.data else 'am'
+    lang = res.data[0]['lang']
+    # 3. ወደ ክፍያ ሂደት ማለፍ
     await show_prizes_and_pay(message, lang)
     
 # --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
