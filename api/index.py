@@ -174,6 +174,27 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     except Exception as e:
         print(f"Error: {e}")
         await message.answer("❌ ስህተት ተፈጥሯል። እባክዎ በሌላ ጊዜ ይሞክሩ።")
+
+@dp.callback_query(F.data == "check_join")
+async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    # አባልነቱን በ is_member ፈንክሽን ቼክ ማድረግ
+    if await is_member(user_id):
+        # 1. ዳታቤዝ ውስጥ ቋንቋውን እና ስሙን መፈለግ
+        res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
+        lang = res.data[0]['lang'] if res.data else 'am'
+        name = res.data[0]['full_name'] if res.data else callback.from_user.full_name
+        
+        # 2. የእንኳን ደህና መጡ መልዕክት እና ዋና ሜኑ
+        await callback.answer("✅ ተረጋግጧል! እንኳን ደህና መጡ።", show_alert=False)
+        await callback.message.delete() # የነበረውን የ "Join Channel" መልዕክት ለማጥፋት
+        
+        await send_welcome_msg(callback.message, name, lang)
+    else:
+        # አባል ካልሆነ የሚመጣ ማስጠንቀቂያ
+        await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ!", show_alert=True)
+        
     
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
 async def show_prizes_and_pay(message: types.Message, lang: str):
