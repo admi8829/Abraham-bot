@@ -153,8 +153,9 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
         await check_channel_membership(message, state)
         
     except Exception as e:
-        await message.answer("⚠️ ምዝገባው አልተሳካም። እባክዎ ድጋሚ ይሞክሩ።")
-        
+    print(f"የምዝገባ ስህተት: {e}") # ይህ በTerminal ላይ ስህተቱን በዝርዝር ያሳይሃል
+    await message.answer(f"⚠️ ስህተት ተከስቷል: {e}") 
+    
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
