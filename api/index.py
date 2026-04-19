@@ -41,13 +41,11 @@ class LotteryStates(StatesGroup):
 # --- 4. Helper Functions ---
 async def is_member(user_id: int) -> bool:
     try:
-        # CHANNEL_ID አስቀድሞ ከላይ በኮድህ መገለጹን አረጋግጥ
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        # አባል ከሆነ 'member', 'administrator' ወይም 'creator' የሚል ሁኔታ ይመልሳል
         return member.status in ["member", "administrator", "creator"]
-    except Exception as e:
-        print(f"Error checking membership: {e}")
+    except Exception:
         return False
+        
         
         
 # --- 5. Keyboards ---
@@ -132,6 +130,7 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
     
+    # የራስን ስልክ መላኩን ማረጋገጥ
     if message.contact.user_id != user_id:
         return await message.answer("⚠️ እባክዎ የራስዎን ስልክ ቁጥር ያጋሩ!")
 
@@ -139,10 +138,10 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     referrer_id = data.get("referred_by")
 
     try:
-        # መጀመሪያ ተጠቃሚው መኖሩን በድጋሚ ቼክ ማድረግ
-        user_check = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
+        # መጀመሪያ ተጠቃሚው መኖሩን ማረጋገጥ
+        user_exists = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
         
-        user_data = {
+        user_info = {
             "user_id": user_id,
             "username": message.from_user.username,
             "full_name": html.escape(message.from_user.full_name),
@@ -150,27 +149,32 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
             "lang": "am"
         }
 
-        if user_check.data:
-            # 1. ተጠቃሚው ቀድሞ ካለ ስልኩን ብቻ ማዘመን (Update)
+        if user_exists.data:
+            # ካለ ስልኩን ብቻ እናድሳለን
             supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
         else:
-            # 2. ተጠቃሚው ከሌለ አዲስ መመዝገብ (Insert)
-            user_data["referred_by"] = referrer_id
-            supabase.table("users").insert(user_data).execute()
+            # ከሌለ አዲስ እንመዘግባለን
+            user_info["referred_by"] = referrer_id
+            supabase.table("users").insert(user_info).execute()
         
         await state.clear()
-        await message.answer("✅ ምዝገባ ተጠናቅቋል።", reply_markup=types.ReplyKeyboardRemove())
         
-        # ወደ ቻናል ቼክ ማለፍ
-        await check_channel_membership(message, state)
+        # ቻናል ውስጥ መኖሩን ቼክ ማድረግ
+        if await is_member(user_id):
+            # ቻናል ውስጥ ካለ ዋናው ሜኑ ይከፈትለታል
+            await message.answer("✅ ምዝገባዎ ተጠናቅቋል። እንኳን ደህና መጡ!", reply_markup=types.ReplyKeyboardRemove())
+            # እዚህ ጋር ዋናውን ሜኑ የሚከፍተውን ፈንክሽን ጥራ (ለምሳሌ send_welcome_msg)
+        else:
+            # ቻናል ውስጥ ካልሆነ እንዲገባ ይጠየቅ
+            kb = InlineKeyboardBuilder()
+            kb.row(types.InlineKeyboardButton(text="📢 ቻናላችንን ይቀላቀሉ", url="https://t.me/ethiouh"))
+            kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+            await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
 
     except Exception as e:
-        print(f"Registration Error: {e}")
-        # ስህተት ቢፈጠር እንኳ ተጠቃሚው ዳታቤዝ ውስጥ ገብቶ ከሆነ ወደ ቻናል ቼክ እንዲያልፍ እናደርጋለን
-        await message.answer("⚠️ ምዝገባው ተጠናቅቋል ወይም ቀድመው ተመዝግበዋል።")
-        await check_channel_membership(message, state)
-        
-
+        print(f"Error: {e}")
+        await message.answer("❌ ስህተት ተፈጥሯል። እባክዎ በሌላ ጊዜ ይሞክሩ።")
+    
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
