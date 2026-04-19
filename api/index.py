@@ -39,25 +39,16 @@ class LotteryStates(StatesGroup):
 
 # --- 4. Helper Functions ---
 # --- 4. Helper Functions ---
-async def check_channel_membership(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    if await is_member(user_id):
-        # ቻናል ውስጥ ካለ ዋናውን ሜኑ ያሳየዋል
-        user_res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
-        lang = user_res.data[0]['lang'] if user_res.data else 'am'
-        name = user_res.data[0]['full_name']
-        await send_welcome_msg(message, name, lang)
-    else:
-        # ካልገባ እንዲገባ ይጠይቀዋል
-        kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+async def is_member(user_id: int) -> bool:
+    try:
+        # CHANNEL_ID አስቀድሞ ከላይ በኮድህ መገለጹን አረጋግጥ
+        member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        # አባል ከሆነ 'member', 'administrator' ወይም 'creator' የሚል ሁኔታ ይመልሳል
+        return member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        print(f"Error checking membership: {e}")
+        return False
         
-        await message.answer(
-            "⚠️ <b>የቻናል ግዴታ!</b>\n\nይህንን ቦት ለመጠቀም መጀመሪያ ቻናላችንን መቀላቀል አለብዎት።",
-            reply_markup=kb.as_markup(),
-            parse_mode="HTML"
-        )
         
 # --- 5. Keyboards ---
 def get_main_menu(lang="am"):
@@ -142,44 +133,41 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
     
-    # ተጠቃሚው የራሱን ስልክ መላኩን ማረጋገጫ (Security)
     if message.contact.user_id != user_id:
         return await message.answer("⚠️ እባክዎ የራስዎን ስልክ ቁጥር ያጋሩ!")
 
-    state_data = await state.get_data()
-    referrer_id = state_data.get("referred_by")
+    data = await state.get_data()
+    referrer_id = data.get("referred_by")
 
     try:
-        # ዳታቤዝ ውስጥ መኖሩን ቼክ ማድረግ
-        check_user = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
-        
-        user_info = {
+        # 1. መመዝገብ ወይም ማዘመን (Upsert)
+        supabase.table("users").upsert({
             "user_id": user_id,
             "username": message.from_user.username,
             "full_name": html.escape(message.from_user.full_name),
             "phone": phone,
+            "referred_by": referrer_id,
             "lang": "am"
-        }
-
-        if check_user.data:
-            # ካለ ማዘመን
-            supabase.table("users").update(user_info).eq("user_id", user_id).execute()
-        else:
-            # ከሌለ አዲስ መመዝገብ (Referrer ጨምሮ)
-            user_info["referred_by"] = referrer_id
-            supabase.table("users").insert(user_info).execute()
+        }).execute()
         
         await state.clear()
-        await message.answer("✅ ስልክዎ በትክክል ተመዝግቧል!", reply_markup=types.ReplyKeyboardRemove())
+        await message.answer("✅ ምዝገባ ተጠናቅቋል።")
         
-        # ወደ ቻናል ቼክ ማለፍ
-        await check_channel_membership(message, state)
-        
+        # 2. የቻናል ፍተሻ (አሁን is_member ስላለ አይሳሳትም)
+        if await is_member(user_id):
+            await send_welcome_msg(message, message.from_user.full_name, "am")
+        else:
+            # ቻናል እንዲገባ መጠየቂያ
+            kb = InlineKeyboardBuilder()
+            kb.row(types.InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/ethiouh")) # የቻናልህን ሊንክ እዚህ ተካ
+            kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+            await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
+
     except Exception as e:
-        # ትክክለኛውን ስህተት በ Terminal ያሳየናል
-        print(f"Registration Detailed Error: {e}") 
-        await message.answer(f"⚠️ ምዝገባው አልተሳካም። ስህተት፦ {str(e)[:50]}...")
+        print(f"Detailed DB Error: {e}")
+        await message.answer("⚠️ በምዝገባ ወቅት ችግር አጋጥሟል። እባክዎ ደግመው ይሞክሩ።")
         
+
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
