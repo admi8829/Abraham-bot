@@ -70,42 +70,41 @@ def get_main_menu(lang="am"):
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
     
+
 @dp.message(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
-    user_full_name = html.escape(message.from_user.full_name)
     
     try:
-        # 1. መጀመሪያ ተጠቃሚው ስልኩ ተመዝግቦ ዳታቤዝ ውስጥ መኖሩን ቼክ እናድርግ
+        # በቅድሚያ ተጠቃሚውን መፈለግ
         res = supabase.table("users").select("phone").eq("user_id", user_id).execute()
         
+        # ተጠቃሚው ካለ እና ስልክ ካለው በቀጥታ ወደ ቻናል ቼክ
         if res.data and res.data[0].get('phone'):
-            # ስልኩ አስቀድሞ ካለ ቀጥታ ወደ ቻናል ቼክ ይሄዳል
             return await check_channel_membership(message, state)
 
-        # 2. አዲስ ተጠቃሚ ከሆነ የሪፈራል ሊንኩን በ State መያዝ
+        # አዲስ ተጠቃሚ ከሆነ ሪፈራል መያዝ
         if message.text and len(message.text.split()) > 1:
             ref_arg = message.text.split()[1]
             if ref_arg.isdigit() and int(ref_arg) != user_id:
                 await state.update_data(referred_by=int(ref_arg))
 
-        # 3. ስልክ ቁጥር እንዲልክ መጠየቅ
+        # ስልክ ቁጥር መጠየቅ
         await state.set_state(LotteryStates.waiting_for_phone)
         kb = ReplyKeyboardBuilder()
         kb.row(types.KeyboardButton(text="📲 ስልክ ቁጥርዎን ያጋሩ / Share Contact", request_contact=True))
         
-        welcome_text = (
-            f"👋 <b>ሰላም {user_full_name}!</b>\n\n"
-            "ለመቀጠል እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያጋሩ።\n"
-            "Please share your contact number to proceed."
+        await message.answer(
+            f"👋 ሰላም {html.escape(message.from_user.full_name)}!\nለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።",
+            reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
         )
-        await message.answer(welcome_text, reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True), parse_mode="HTML")
 
     except Exception as e:
-        print(f"Start Error: {e}")
-        await message.answer("⚠️ ችግር አጋጥሟል። እባክዎ ትንሽ ቆይተው /start ብለው ይሞክሩ።")
+        print(f"Start Logic Error: {e}")
+        # ዳታቤዝ ቢጠፋ እንኳ ስልክ እንዲጠይቅ ማድረግ (Fallback)
+        await state.set_state(LotteryStates.waiting_for_phone)
+        await message.answer("ለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።")
         
-
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 # 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
@@ -140,32 +139,36 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     referrer_id = data.get("referred_by")
 
     try:
-        # 1. መመዝገብ ወይም ማዘመን (Upsert)
-        supabase.table("users").upsert({
+        # መጀመሪያ ተጠቃሚው መኖሩን በድጋሚ ቼክ ማድረግ
+        user_check = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
+        
+        user_data = {
             "user_id": user_id,
             "username": message.from_user.username,
             "full_name": html.escape(message.from_user.full_name),
             "phone": phone,
-            "referred_by": referrer_id,
             "lang": "am"
-        }).execute()
+        }
+
+        if user_check.data:
+            # 1. ተጠቃሚው ቀድሞ ካለ ስልኩን ብቻ ማዘመን (Update)
+            supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
+        else:
+            # 2. ተጠቃሚው ከሌለ አዲስ መመዝገብ (Insert)
+            user_data["referred_by"] = referrer_id
+            supabase.table("users").insert(user_data).execute()
         
         await state.clear()
-        await message.answer("✅ ምዝገባ ተጠናቅቋል።")
+        await message.answer("✅ ምዝገባ ተጠናቅቋል።", reply_markup=types.ReplyKeyboardRemove())
         
-        # 2. የቻናል ፍተሻ (አሁን is_member ስላለ አይሳሳትም)
-        if await is_member(user_id):
-            await send_welcome_msg(message, message.from_user.full_name, "am")
-        else:
-            # ቻናል እንዲገባ መጠየቂያ
-            kb = InlineKeyboardBuilder()
-            kb.row(types.InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/ethiouh")) # የቻናልህን ሊንክ እዚህ ተካ
-            kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
-            await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
+        # ወደ ቻናል ቼክ ማለፍ
+        await check_channel_membership(message, state)
 
     except Exception as e:
-        print(f"Detailed DB Error: {e}")
-        await message.answer("⚠️ በምዝገባ ወቅት ችግር አጋጥሟል። እባክዎ ደግመው ይሞክሩ።")
+        print(f"Registration Error: {e}")
+        # ስህተት ቢፈጠር እንኳ ተጠቃሚው ዳታቤዝ ውስጥ ገብቶ ከሆነ ወደ ቻናል ቼክ እንዲያልፍ እናደርጋለን
+        await message.answer("⚠️ ምዝገባው ተጠናቅቋል ወይም ቀድመው ተመዝግበዋል።")
+        await check_channel_membership(message, state)
         
 
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
