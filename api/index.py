@@ -47,6 +47,12 @@ async def is_member(user_id: int) -> bool:
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
+
+async def send_welcome_msg(message: types.Message, name: str, lang: str):
+    """ዋናውን ሜኑ (Welcome Message) የሚልክ ፈንክሽን"""
+    welcome_txt = f"👋 እንኳን ደህና መጡ <b>{name}</b>!" if lang == "am" else f"👋 Welcome <b>{name}</b>!"
+    await message.answer(welcome_txt, reply_markup=get_main_menu(lang), parse_mode="HTML")
+    
 async def check_channel_membership(message: types.Message, state: FSMContext):
     """የቻናል አባልነትን አይቶ ወደ ሜኑ ወይም ወደ ማስጠንቀቂያ የሚመራ"""
     user_id = message.from_user.id
