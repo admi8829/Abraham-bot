@@ -342,73 +342,61 @@ async def buy_ticket_handler(message: types.Message, state: FSMContext):
         await message.answer("⚠️ System error. Please try again later.")
 
 async def show_prizes_and_pay(message: types.Message, lang: str):
-    """የሽልማት ዝርዝርን ከተጠቃሚው ቋንቋ ጋር በማዛመድ ከዳታቤዝ የሚያመጣ"""
+    """የሽልማት ዝርዝርን በቋንቋ ለይቶ (Filter) የሚያሳይ"""
     try:
-        # 1. ዳታቤዝ ውስጥ ከተጠቃሚው ቋንቋ ጋር የሚመጣጠኑ ሽልማቶችን ብቻ መምረጥ
-        # .eq("lang", lang) የሚለው ተጠቃሚው 'am' ከሆነ የአማርኛውን ረድፎች ብቻ ያመጣል
+        # 1. ዳታቤዝ ላይ ተጠቃሚው በመረጠው ቋንቋ ብቻ ፊልተር አድርጎ ማምጣት
+        # .eq("lang", lang) የሚለው ቁልፍ መፍትሄ ነው (አማርኛ ከሆነ am ብቻ፣ እንግሊዝኛ ከሆነ en ብቻ ያመጣል)
         prizes_res = supabase.table("prizes").select("rank, amount").eq("lang", lang).execute()
         prizes = prizes_res.data or []
         
-        prize_list = ""
-        
-        # 2. የቋንቋ ምርጫ መሰረት ቋሚ ጽሁፎችን ማዘጋጀት
+        # 2. እንደ ቋንቋው ርዕስ እና በተኖችን ማዘጋጀት
         if lang == "am":
             title = "🎁 <b>ልዩ የሽልማት ዝርዝር</b> 🎁"
             price_tag = "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ብር</code>"
             footer = "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
             pay_btn_text = "💳 ክፍያ ለመፈጸም እዚህ ይጫኑ"
             empty_msg = "⏳ <i>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</i>"
-            rank_suffix = "ኛ ደረጃ"
         else:
             title = "🎁 <b>Exclusive Prize List</b> 🎁"
             price_tag = "🎫 <b>Ticket Price:</b> <code>50 ETB</code>"
             footer = "✨ <i>Join now and be our next winner!</i>"
             pay_btn_text = "💳 Click here to Pay"
             empty_msg = "⏳ <i>Prizes will be announced soon!</i>"
-            rank_prefix = "Rank"
 
-        # 3. የሽልማት ዝርዝሩን ማቀናጀት
+        prize_list = ""
         if not prizes:
             prize_list = empty_msg
         else:
-            # በደረጃ (rank) መደርደር
+            # 3. ሽልማቶቹን በደረጃ (Rank) ደርድር
             sorted_prizes = sorted(prizes, key=lambda x: x['rank'])
-            
             for p in sorted_prizes:
                 rank = p['rank']
-                amount = p['amount'] # በዳታቤዝህ '10,000 ብር' ወይም '10,000 ETB' ተብሎ የተቀመጠው
+                amount = p['amount'] # ዳታቤዝ ውስጥ ያለው '10,000 ብር' ወይም '10,000 ETB'
                 icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "🏆"
                 
-                if lang == "am":
-                    # ምሳሌ፡ 🥇 1ኛ ደረጃ: 10,000 ብር
-                    prize_list += f"{icon} <b>{rank}{rank_suffix}:</b> <code>{amount}</code>\n"
-                else:
-                    # ምሳሌ፡ 🥇 Rank 1: 10,000 ETB
-                    prize_list += f"{icon} <b>{rank_prefix} {rank}:</b> <code>{amount}</code>\n"
+                # በዳታቤዝህ ላይ ያሉት Rank እሴቶች (1ኛ, 1st) ስለሆኑ ቀጥታ እነሱን መጠቀም ይቻላል
+                prize_list += f"{icon} <b>{rank}:</b> <code>{amount}</code>\n"
 
-        # 4. ሙሉ መልዕክቱን በ HTML ማቀናጀት
+        # 4. መልዕክቱን ማቀናጀት
         info_text = (
             f"{title}\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{prize_list}\n\n"
+            f"{prize_list}\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
             f"{price_tag}\n\n"
             f"{footer}"
         )
 
-        # 5. የክፍያ በተን (Inline Button)
         inline_kb = InlineKeyboardBuilder()
         inline_kb.row(types.InlineKeyboardButton(text=pay_btn_text, callback_data="show_payment"))
         
         await message.answer(info_text, reply_markup=inline_kb.as_markup(), parse_mode="HTML")
 
     except Exception as e:
-        print(f"Prizes Database Error: {e}")
-        error_msg = "❌ Unable to load prizes." if lang == "en" else "❌ የሽልማት ዝርዝሩን መጫን አልተቻለም።"
+        print(f"Prizes View Error: {e}")
+        error_msg = "❌ Error: Unable to load prizes." if lang == "en" else "❌ ስህተት፡ የሽልማት ዝርዝሩን መጫን አልተቻለም።"
         await message.answer(error_msg, parse_mode="HTML")
         
-            
-                
 # --- 2. የክፍያ መመሪያ (Callback) ---
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery, state: FSMContext):
