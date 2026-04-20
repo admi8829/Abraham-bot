@@ -292,39 +292,88 @@ async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
         # በድንገት ዳታቤዝ ቢጠፋ እንኳ ለተጠቃሚው ምላሽ መስጠት
         await callback.answer("⚠️ Connection error. Please try again.", show_alert=True)
         
-# --- 8. Feature Handlers ---
-
+                          # --- 8. Feature Handlers --
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
 async def buy_ticket_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
-    # ሁልጊዜ ትኬት ከመቁረጡ በፊት አባልነቱን ቼክ ያደርጋል
-    if not await is_member(user_id):
-        kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
-        return await message.answer("⚠️ ትኬት ለመቁረጥ መጀመሪያ ቻናላችንን መቀላቀል አለብዎት!", reply_markup=kb.as_markup())
+    try:
+        # 1. መጀመሪያ የተጠቃሚውን ቋንቋ ከዳታቤዝ ማግኘት
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        
+        if not res.data:
+            # ተጠቃሚው ዳታቤዝ ውስጥ ከሌለ
+            return await message.answer("⚠️ Please start the bot first by typing /start.")
+        
+        lang = res.data[0].get('lang', 'en')
 
-    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-    if not res.data:
-        return await message.answer("⚠️ እባክዎ መጀመሪያ /start ብለው ይመዝገቡ።")
-
-    lang = res.data[0]['lang']
-    # ክፍያውን የሚያሳይ ፈንክሽን መጥራት (ይህ ፈንክሽን ቀሪው ኮድህ ውስጥ መኖሩን አረጋግጥ)
-    await show_prizes_and_pay(message, lang)
+        # 2. ትኬት ከመቁረጡ በፊት ሁልጊዜ አባልነቱን ማረጋገጥ
+        if not await is_member(user_id):
+            kb = InlineKeyboardBuilder()
             
-# --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
+            if lang == "am":
+                warn_text = (
+                    "<b>⚠️ ማሳሰቢያ!</b>\n\n"
+                    "ትኬት ለመቁረጥ መጀመሪያ የቴሌግራም ቻናላችን አባል መሆን አለብዎት። "
+                    "እባክዎ ቻናሉን ተቀላቅለው 'አረጋግጥ' የሚለውን ይጫኑ።"
+                )
+                btn_join = "📢 ቻናሉን ተቀላቀል"
+                btn_verify = "🔄 አረጋግጥ"
+            else:
+                warn_text = (
+                    "<b>⚠️ Attention!</b>\n\n"
+                    "To purchase a ticket, you must first be a member of our official channel. "
+                    "Please join and click 'Verify' to continue."
+                )
+                btn_join = "📢 Join Our Channel"
+                btn_verify = "🔄 Verify Membership"
+
+            kb.row(types.InlineKeyboardButton(text=btn_join, url="https://t.me/ethiouh"))
+            kb.row(types.InlineKeyboardButton(text=btn_verify, callback_data="check_join"))
+            
+            return await message.answer(warn_text, reply_markup=kb.as_markup(), parse_mode="HTML")
+
+        # 3. አባል ከሆነ የሽልማት ዝርዝር እና የክፍያ አማራጭ ማሳየት
+        # ይህ ፈንክሽን ቀደም ብለን የሰራነው ነው
+        await show_prizes_and_pay(message, lang)
+
+    except Exception as e:
+        print(f"Buy Ticket Error: {e}")
+        await message.answer("⚠️ System error. Please try again later.")
+        
 async def show_prizes_and_pay(message: types.Message, lang: str):
+    """የሽልማት ዝርዝር እና የክፍያ ቁልፍ እንደ ተጠቃሚው ቋንቋ ምርጫ የሚያሳይ"""
     try:
         # 1. የሽልማት መረጃን ከዳታቤዝ ማምጣት
         prizes_res = supabase.table("prizes").select("rank, amount").execute()
         prizes = prizes_res.data or []
         
         prize_list = ""
-        if not prizes:
-            prize_list = "⏳ <i>Prizes will be announced soon!</i>" if lang == "en" else "⏳ <i>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</i>"
+        
+        # 2. የቋንቋ ምርጫን መለየት እና ይዘቱን ማዘጋጀት
+        if lang == "am":
+            # --- አማርኛ ብቻ ---
+            title = "🎁 <b>ልዩ የሽልማት ዝርዝር</b> 🎁"
+            price_tag = "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ብር</code>"
+            footer = "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
+            pay_btn_text = "💳 ክፍያ ለመፈጸም እዚህ ይጫኑ"
+            empty_msg = "⏳ <i>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</i>"
+            rank_label = "ኛ ደረጃ"
+            currency = "ብር"
         else:
-            # ሽልማቶችን በደረጃ (Rank) አስተካክሎ መደርደር
+            # --- English Only ---
+            title = "🎁 <b>Exclusive Prize List</b> 🎁"
+            price_tag = "🎫 <b>Ticket Price:</b> <code>50 ETB</code>"
+            footer = "✨ <i>Join now and be our next winner!</i>"
+            pay_btn_text = "💳 Click here to Pay"
+            empty_msg = "⏳ <i>Prizes will be announced soon!</i>"
+            rank_label = "Rank"
+            currency = "ETB"
+
+        # 3. የሽልማት ዝርዝሩን ማቀናጀት
+        if not prizes:
+            prize_list = empty_msg
+        else:
             sorted_prizes = sorted(prizes, key=lambda x: x['rank'])
             for p in sorted_prizes:
                 rank = p['rank']
@@ -332,33 +381,21 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
                 icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "🏆"
                 
                 if lang == "am":
-                    prize_list += f"{icon} <b>{rank}ኛ ደረጃ:</b> <code>{amount} ብር</code>\n"
+                    prize_list += f"{icon} <b>{rank}{rank_label}:</b> <code>{amount} {currency}</code>\n"
                 else:
-                    prize_list += f"{icon} <b>Rank {rank}:</b> <code>{amount} ETB</code>\n"
+                    prize_list += f"{icon} <b>{rank_label} {rank}:</b> <code>{amount} {currency}</code>\n"
 
-        # 2. እንደ ቋንቋው ጽሁፉን ማዘጋጀት
-        if lang == "am":
-            title = "🎁 <b>ልዩ የሽልማት ዝርዝር</b> 🎁"
-            price_tag = "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ብር</code>"
-            footer = "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
-            pay_btn_text = "💳 ክፍያ ለመፈጸም እዚህ ይጫኑ"
-        else:
-            title = "🎁 <b>Exclusive Prize List</b> 🎁"
-            price_tag = "🎫 <b>Ticket Price:</b> <code>50 ETB</code>"
-            footer = "✨ <i>Join now and be our next winner!</i>"
-            pay_btn_text = "💳 Click here to Pay"
-
-        # 3. ሙሉ መልዕክቱን ማቀናጀት
+        # 4. ሙሉ መልዕክቱን በ HTML ማቀናጀት
         info_text = (
             f"{title}\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{prize_list}\n"
+            f"{prize_list}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
             f"{price_tag}\n\n"
             f"{footer}"
         )
 
-        # 4. የክፍያ በተን (Inline Button)
+        # 5. የክፍያ በተን (Inline Button)
         inline_kb = InlineKeyboardBuilder()
         inline_kb.row(types.InlineKeyboardButton(text=pay_btn_text, callback_data="show_payment"))
         
@@ -369,6 +406,7 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
         error_msg = "❌ <b>Error:</b> Unable to load prizes." if lang == "en" else "❌ <b>ስህተት:</b> የሽልማት ዝርዝሩን መጫን አልተቻለም።"
         await message.answer(error_msg, parse_mode="HTML")
             
+                
 # --- 2. የክፍያ መመሪያ (Callback) ---
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery, state: FSMContext):
