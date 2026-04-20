@@ -47,26 +47,58 @@ async def is_member(user_id: int) -> bool:
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
-
-async def send_welcome_msg(message: types.Message, name: str, lang: str):
-    """ዋናውን ሜኑ (Welcome Message) የሚልክ ፈንክሽን"""
-    welcome_txt = f"👋 እንኳን ደህና መጡ <b>{name}</b>!" if lang == "am" else f"👋 Welcome <b>{name}</b>!"
-    await message.answer(welcome_txt, reply_markup=get_main_menu(lang), parse_mode="HTML")
-
 async def check_channel_membership(message: types.Message, state: FSMContext):
     """የቻናል አባልነትን አይቶ ወደ ሜኑ ወይም ወደ ማስጠንቀቂያ የሚመራ"""
     user_id = message.from_user.id
-    if await is_member(user_id):
+    
+    try:
+        # 1. መጀመሪያ ዳታቤዝ ውስጥ ያለውን ቋንቋ እና ስም መለየት
         res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
-        lang = res.data[0]['lang'] if res.data else 'am'
+        lang = res.data[0]['lang'] if res.data else 'en' # Default to English
         name = res.data[0]['full_name'] if res.data else message.from_user.full_name
-        await send_welcome_msg(message, name, lang)
-    else:
-        kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
-        await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
 
+        # 2. አባልነቱን ቼክ ማድረግ
+        if await is_member(user_id):
+            # አባል ከሆነ በቀጥታ ወደ ዋናው ሜኑ ይለፋል
+            await send_welcome_msg(message, name, lang)
+        else:
+            # አባል ካልሆነ የሚመጣ ማራኪ ግብዣ
+            kb = InlineKeyboardBuilder()
+            
+            if lang == "am":
+                join_text = (
+                    f"<b>ሰላም {name}! 👋</b>\n\n"
+                    "ለመቀጠል አንድ የመጨረሻ ደረጃ ቀርቶዎታል፦\n"
+                    "እባክዎ መጀመሪያ የቴሌግራም ቻናላችንን ይቀላቀሉ።\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━\n"
+                    "📢 <b>የጥቅሙ ተካፋይ ለመሆን ቻናሉን ይግቡ!</b>"
+                )
+                btn_join = "📢 ቻናሉን ተቀላቀል"
+                btn_verify = "🔄 አረጋግጥ"
+            else:
+                join_text = (
+                    f"<b>Hello {name}! 👋</b>\n\n"
+                    "You are just one step away!\n"
+                    "Please join our official channel to proceed.\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━━\n"
+                    "📢 <b>Join now to access all features!</b>"
+                )
+                btn_join = "📢 Join Our Channel"
+                btn_verify = "🔄 Verify Membership"
+
+            kb.row(types.InlineKeyboardButton(text=btn_join, url="https://t.me/ethiouh"))
+            kb.row(types.InlineKeyboardButton(text=btn_verify, callback_data="check_join"))
+            
+            await message.answer(
+                join_text, 
+                reply_markup=kb.as_markup(),
+                parse_mode="HTML"
+            )
+
+    except Exception as e:
+        print(f"Membership Check Error: {e}")
+        await message.answer("⚠️ System error. Please try /start again.")
+        
 # --- 5. Keyboards ---
 
 def get_main_menu(lang="am"):
