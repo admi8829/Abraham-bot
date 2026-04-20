@@ -90,40 +90,76 @@ def get_main_menu(lang="am"):
     return kb.as_markup(resize_keyboard=True)
 
 # --- 6. Message Handlers ---
-
 @dp.message(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    first_name = html.escape(message.from_user.first_name)
+    username = message.from_user.username or "No Username"
     
+    # 1. Prepare user data for Database (Immediate Sync)
+    user_data = {
+        "user_id": user_id,
+        "full_name": first_name,
+        "username": username,
+        "lang": "en" # Default to English as requested
+    }
+
     try:
-        # 1. ተጠቃሚው መኖሩን እና ስልክ ቁጥር እንዳለው ቼክ ማድረግ
-        res = supabase.table("users").select("phone").eq("user_id", user_id).execute()
+        # 2. Check if user already exists
+        res = supabase.table("users").select("phone, user_id").eq("user_id", user_id).execute()
         
+        # 3. Handle Referrals (Security: Cannot refer self)
+        if not res.data: # Only for brand new users
+            if message.text and len(message.text.split()) > 1:
+                ref_arg = message.text.split()[1]
+                if ref_arg.isdigit() and int(ref_arg) != user_id:
+                    user_data["referred_by"] = int(ref_arg)
+            
+            # Insert initial data (User ID, Name, Username)
+            supabase.table("users").insert(user_data).execute()
+        else:
+            # Update existing user info (Sync username/name)
+            supabase.table("users").update({
+                "full_name": first_name,
+                "username": username
+            }).eq("user_id", user_id).execute()
+
+        # 4. Routing: If phone exists, go to membership check, else ask for phone
         if res.data and res.data[0].get('phone'):
-            # ስልኩ ካለ በቀጥታ አባልነቱን ወደ ማረጋገጥ ይሄዳል
             return await check_channel_membership(message, state)
 
-        # 2. አዲስ ከሆነ ሪፈራል መያዝ
-        if message.text and len(message.text.split()) > 1:
-            ref_arg = message.text.split()[1]
-            if ref_arg.isdigit() and int(ref_arg) != user_id:
-                await state.update_data(referred_by=int(ref_arg))
-
-        # 3. ስልክ ቁጥር መጠየቅ
+        # 5. UI/UX: Professional English Welcome Message (HTML)
         await state.set_state(LotteryStates.waiting_for_phone)
+        
         kb = ReplyKeyboardBuilder()
-        kb.row(types.KeyboardButton(text="📲 ስልክ ቁጥርዎን ያጋሩ / Share Contact", request_contact=True))
+        kb.row(types.KeyboardButton(text="📲 Share Contact Number", request_contact=True))
+        
+        welcome_text = (
+            f"<b>🌟 Welcome to the Premium Lottery, {first_name}! 🌟</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 <b>User ID:</b> <code>{user_id}</code>\n"
+            f"👤 <b>Username:</b> @{username}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"To provide a secure experience and verify your identity, "
+            f"please <b>share your contact number</b> using the button below.\n\n"
+            f"<i>🚀 Your journey to big wins starts here!</i>"
+        )
         
         await message.answer(
-            f"👋 ሰላም {html.escape(message.from_user.full_name)}!\nለመቀጠል እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያጋሩ።",
-            reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
+            welcome_text, 
+            reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True),
+            parse_mode="HTML"
         )
 
     except Exception as e:
-        print(f"Start Logic Error: {e}")
+        print(f"Critical Start Error: {e}")
+        # Fallback in case of DB connection issues
         await state.set_state(LotteryStates.waiting_for_phone)
-        await message.answer("ሰላም! ለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።")
-
+        await message.answer(
+            "<b>Welcome!</b>\nPlease share your contact number to proceed with registration.",
+            parse_mode="HTML"
+            )
+        
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
 async def register_and_check_channel(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
