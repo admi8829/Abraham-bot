@@ -402,52 +402,61 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
 # --- 2. የክፍያ መመሪያ (Callback) ---
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery, state: FSMContext):
-    # 1. ፈጣን ምላሽ (Loading እንዳይሽከረከር)
+    # 1. ፈጣን ምላሽ ለቴሌግራም ሲስተም
     await callback.answer()
     
     user_id = callback.from_user.id
     
-    # 2. የተጠቃሚውን ቋንቋ ማረጋገጥ
     try:
-        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-        lang = res.data[0].get('lang', 'en') if res.data else 'en'
-    except:
-        lang = 'en'
-
-    # 3. ቦቱን "ደረሰኝ ጠባቂ" ስቴት ላይ ማድረግ
-    await state.set_state(LotteryStates.waiting_for_receipt)
-
-    PAYMENT_PHONE = "09XXXXXXXX" # ⚠️ እዚህ ጋር የራስህን ቁጥር ተካ
-
-    if lang == "am":
-        payment_text = (
-            "🚀 <b>የመጨረሻው ደረጃ!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "ትኬትዎን ለመቁረጥ የሚከተሉትን ደረጃዎች ይከተሉ፦\n\n"
-            f"1️⃣ በቴሌብር (Telebirr) <code>50 ETB</code> ይላኩ።\n"
-            f"📍 ስልክ፦ <code>{PAYMENT_PHONE}</code> (ቁጥሩን ለመገልበጥ ይንኩት)\n\n"
-            "2️⃣ ክፍያውን እንደፈጸሙ የደረሰኙን <b>ስክሪንሻት (Screenshot)</b> እዚህ ይላኩ።\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            "📢 <b>ማሳሰቢያ፦</b> አድሚኖቻችን ደረሰኙን እንዳረጋገጡ ትኬትዎን ወዲያውኑ ይልካሉ።\n\n"
-            "<i>ዕድል ለደፋሮች ናት! መልካም ዕድል! 🍀</i>"
-        )
-    else:
-        payment_text = (
-            "🚀 <b>Final Step!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Follow these steps to get your ticket:\n\n"
-            f"1️⃣ Send <code>50 ETB</code> via Telebirr.\n"
-            f"📍 Phone: <code>{PAYMENT_PHONE}</code> (Tap to copy)\n\n"
-            "2️⃣ Send the <b>Payment Screenshot</b> right here.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
-            "📢 <b>Note:</b> Your ticket will be issued once our admins verify the receipt.\n\n"
-            "<i>Fortune favors the bold! Good Luck! 🍀</i>"
-        )
-
-    await callback.message.answer(payment_text, parse_mode="HTML")
+        # 2. የተጠቃሚውን ቋንቋ እና ስም ማግኘት
+        res = supabase.table("users").select("lang, full_name").eq("user_id", user_id).execute()
+        user_info = res.data[0] if res.data else {}
+        lang = user_info.get('lang', 'en')
+        user_name = user_info.get('full_name', callback.from_user.first_name)
         
+        # 3. የክፍያ መረጃዎች (እዚህ ጋር የራስህን መረጃ ተካ)
+        PAYMENT_PHONE = "09XXXXXXXX" 
+        ACCOUNT_HOLDER = "Habtamu Yitiru" # ⚠️ የባንክ አካውንቱ ስም
+        TICKET_PRICE = "50"
 
+        # 4. ቦቱን "ደረሰኝ ጠባቂ" ስቴት ላይ ማድረግ
+        await state.set_state(LotteryStates.waiting_for_receipt)
 
+        if lang == "am":
+            payment_text = (
+                f"<b>ሰላም {user_name} 👋፣ ክፍያዎን ይፈጽሙ</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"ትኬትዎን ለመቁረጥ <b>{TICKET_PRICE} ብር</b> በሚከተለው አድራሻ ይላኩ፦\n\n"
+                f"<b>🔹 በቴሌብር (Telebirr)</b>\n"
+                f"📍 ስልክ፦ <code>{PAYMENT_PHONE}</code>\n"
+                f"👤 ስም፦ <b>{ACCOUNT_HOLDER}</b>\n\n"
+                "<b>ደረጃ 2፦</b>\n"
+                "ክፍያውን እንደፈጸሙ የደረሰኙን <b>ፎቶ (Screenshot)</b> እዚህ ይላኩ።\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "⚠️ <b>ማሳሰቢያ፡</b> አድሚኖቻችን ደረሰኙን በጥቂት ደቂቃዎች ውስጥ አረጋግጠው ትኬትዎን ይልካሉ።\n\n"
+                "<b>መልካም ዕድል! 🍀</b>"
+            )
+        else:
+            payment_text = (
+                f"<b>Hello {user_name} 👋, Complete Payment</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"To get your ticket, please send <b>{TICKET_PRICE} ETB</b> to:\n\n"
+                f"<b>🔹 via Telebirr</b>\n"
+                f"📍 Phone: <code>{PAYMENT_PHONE}</code>\n"
+                f"👤 Name: <b>{ACCOUNT_HOLDER}</b>\n\n"
+                "<b>Step 2:</b>\n"
+                "Send the <b>Payment Screenshot</b> right here.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━\n"
+                "⚠️ <b>Note:</b> Our admins will verify the receipt and issue your ticket shortly.\n\n"
+                "<b>Good Luck! 🍀</b>"
+            )
+
+        await callback.message.answer(payment_text, parse_mode="HTML")
+
+    except Exception as e:
+        print(f"Payment Info Error: {e}")
+        await callback.message.answer("⚠️ System error. Please try again.")
+        
 @dp.message(F.photo)
 async def handle_photos(message: types.Message):
     user_id = message.from_user.id
