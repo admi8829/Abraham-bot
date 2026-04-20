@@ -727,50 +727,61 @@ async def show_winners(message: types.Message):
         await message.answer(error_msg, parse_mode="HTML")
         print(f"DEBUG ERROR: {e}") # ለ Vercel Log እንዲመች
 
-
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
 async def invite_friends_handler(message: types.Message):
     user_id = message.from_user.id
     bot_info = await bot.get_me()
-    # የራሳቸው ልዩ የግብዣ ሊንክ
+    
+    # 1. የራሳቸው ልዩ የግብዣ ሊንክ
     invite_link = f"https://t.me/{bot_info.username}?start={user_id}"
     
-    # ቋንቋውን ማወቅ
-    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-    lang = res.data[0].get('lang', 'am') if res.data else 'am'
+    # 2. የተጠቃሚውን ቋንቋ ማወቅ
+    try:
+        res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+        lang = res.data[0].get('lang', 'en') if res.data else 'en'
+    except:
+        lang = 'en'
 
-    # ስንት ሰው እንደጋበዙ ከዳታቤዝ መቁጠር
-    ref_count_res = supabase.table("users").select("user_id", count="exact").eq("referred_by", user_id).execute()
-    count = ref_count_res.count if ref_count_res.count is not None else 0
+    # 3. ስንት ሰው እንደጋበዙ ከዳታቤዝ መቁጠር (በትክክል ይቆጥራል)
+    try:
+        ref_count_res = supabase.table("users").select("user_id", count="exact").eq("referred_by", str(user_id)).execute()
+        count = ref_count_res.count if ref_count_res.count is not None else 0
+    except:
+        count = 0
 
     if lang == "am":
         text = (
-            "👥 **ጓደኞችዎን ይጋብዙና ሽልማት ያግኙ!**\n\n"
-            "የእርስዎን ልዩ የመጋበዣ ሊንክ ለጓደኞችዎ በመላክ ቦቱን እንዲጠቀሙ ይጋብዙ። "
-            "ብዙ ሰው በጋበዙ ቁጥር የእድል ቁጥር የማግኘት እድልዎ ይጨምራል!\n\n"
-            f"🔗 **የእርስዎ ሊንክ፦**\n`{invite_link}`\n\n"
-            f"📊 **የጋበዙት ሰው ብዛት፦** `{count}` ሰዎች"
+            "<b>👥 ጓደኞችዎን ይጋብዙና የዕድል ባለቤት ይሁኑ!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "ይህንን ቦት ለጓደኞችዎ በማጋራት ብዙ ሰዎች ሲመዘገቡ የእርስዎም የማሸነፍ ዕድል ይጨምራል!\n\n"
+            f"🔗 <b>የእርስዎ የመጋበዣ ሊንክ፦</b>\n<code>{invite_link}</code>\n\n"
+            f"📊 <b>እስካሁን የጋበዙት ሰው ብዛት፦</b> <b>{count} ሰዎች</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>ሊንኩን ተጭነው ለጓደኞችዎ በማጋራት አሁኑኑ መጋበዝ ይጀምሩ!</i>"
         )
-        share_text = "🎁 እዚህ ቦት ላይ ትኬት ቁርጠው የ10,000 ብር አሸናፊ ይሁኑ! ለመጀመር ሊንኩን ይጫኑ፦"
-        btn_msg = "📲 ለጓደኛ ላክ (Share)"
+        share_text = f"🎁 ትኬት በመቁረጥ የዕጣው ተሸላሚ ይሁኑ! ለመመዝገብ ይህንን ሊንክ ይጫኑ፦\n{invite_link}"
+        btn_msg = "📲 ለጓደኛ አጋራ (Share)"
     else:
         text = (
-            "👥 **Invite Friends & Win!**\n\n"
-            "Share your unique link with friends and invite them to the bot. "
-            "The more people you invite, the higher your chances of winning!\n\n"
-            f"🔗 **Your Invite Link:**\n`{invite_link}`\n\n"
-            f"📊 **Total Invited:** `{count}` people"
+            "<b>👥 Invite Friends & Win Big!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Invite your friends to the bot and increase your chances of winning great prizes!\n\n"
+            f"🔗 <b>Your Unique Invite Link:</b>\n<code>{invite_link}</code>\n\n"
+            f"📊 <b>Total Friends Invited:</b> <b>{count} people</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "✨ <i>Share the link and start inviting now!</i>"
         )
-        share_text = "🎁 Win 10,000 ETB by buying a lottery ticket! Click here to start:"
-        btn_msg = "📲 Share Link"
+        share_text = f"🎁 Buy a ticket and be our next winner! Join here to start:\n{invite_link}"
+        btn_msg = "📲 Share Link to Friends"
 
-    # በቀጥታ ለሰው እንዲልኩ (Share Button)
+    # 4. የቀጥታ ማጋሪያ ቁልፍ (Share Button)
+    # ማሳሰቢያ፡ ሊንኩ በ share_text ውስጥ እንዲካተት ተደርጓል
     share_url = f"https://t.me/share/url?url={invite_link}&text={share_text}"
     kb = InlineKeyboardBuilder()
     kb.row(types.InlineKeyboardButton(text=btn_msg, url=share_url))
     
-    await message.answer(text, reply_markup=kb.as_markup(), parse_mode="Markdown")
-        
+    await message.answer(text, reply_markup=kb.as_markup(), parse_mode="HTML")
+    
 
 # 3. አድሚኑ ሲያጸድቅ
 
