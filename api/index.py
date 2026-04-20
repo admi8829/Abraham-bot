@@ -342,7 +342,7 @@ async def buy_ticket_handler(message: types.Message, state: FSMContext):
         await message.answer("⚠️ System error. Please try again later.")
 
 async def show_prizes_and_pay(message: types.Message, lang: str):
-    """የሽልማት ዝርዝርን ይበልጥ ማራኪ በሆነ የ HTML ቅርጽ የሚያሳይ"""
+    """የሽልማት ዝርዝርን በ Bold እና በሚያምር ቅርጽ የሚያሳይ"""
     try:
         # 1. ዳታቤዝ ላይ ፊልተር አድርጎ ማምጣት
         prizes_res = supabase.table("prizes").select("rank, amount").eq("lang", lang).execute()
@@ -352,39 +352,38 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
         if lang == "am":
             title = "🏆 <b>ልዩ የሽልማት ማውጫ</b> 🏆"
             price_tag = "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ብር</code>"
-            footer = "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
+            footer = "✨ <b>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</b>" # Bold ተደርጓል
             pay_btn_text = "💳 ክፍያ ለመፈጸም እዚህ ይጫኑ"
-            empty_msg = "⏳ <i>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</i>"
-            separator = "<b>--- የሽልማት ዝርዝር ---</b>"
+            empty_msg = "⏳ <b>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</b>"
+            separator = "<b>━━━━━━━━━━━━━━━━━━━━━</b>"
         else:
             title = "🏆 <b>Exclusive Prize Pool</b> 🏆"
             price_tag = "🎫 <b>Ticket Price:</b> <code>50 ETB</code>"
-            footer = "✨ <i>Join now and be our next winner!</i>"
+            footer = "✨ <b>Join now and be our next winner!</b>" # Bold ተደርጓል
             pay_btn_text = "💳 Click here to Pay"
-            empty_msg = "⏳ <i>Prizes will be announced soon!</i>"
-            separator = "<b>--- Prize Details ---</b>"
+            empty_msg = "⏳ <b>Prizes will be announced soon!</b>"
+            separator = "<b>━━━━━━━━━━━━━━━━━━━━━</b>"
 
         prize_list = ""
         if not prizes:
             prize_list = f"\n{empty_msg}\n"
         else:
-            # 3. ሽልማቶቹን ደርድር (በተሻለ አሰላለፍ)
+            # 3. ሽልማቶቹን ደርድር
             sorted_prizes = sorted(prizes, key=lambda x: x['rank'])
             for p in sorted_prizes:
                 rank = p['rank']
                 amount = p['amount']
                 icon = "🥇" if "1" in str(rank) else "🥈" if "2" in str(rank) else "🥉" if "3" in str(rank) else "🔹"
                 
-                # እዚህ ጋር ቅርጹን ይበልጥ ሳቢ ለማድረግ ነጥቦችን እንጨምራለን
-                prize_list += f"{icon} {rank} • • • <code>{amount}</code>\n"
+                # እዚህ ጋር rank እና amount ሁለቱም BOLD እንዲሆኑ ተደርጓል
+                prize_list += f"{icon} <b>{rank}</b> ———> <b>{amount}</b>\n"
 
-        # 4. መልዕክቱን በሚያምር አቀራረብ ማቀናጀት
+        # 4. መልዕክቱን ማቀናጀት
         info_text = (
             f"{title}\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
             f"{separator}\n\n"
             f"{prize_list}\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{separator}\n"
             f"{price_tag}\n\n"
             f"{footer}"
         )
@@ -396,9 +395,9 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
 
     except Exception as e:
         print(f"Prizes View Error: {e}")
-        error_msg = "❌ Error: Unable to load prizes." if lang == "en" else "❌ ስህተት፡ የሽልማት ዝርዝሩን መጫን አልተቻለም።"
+        error_msg = "❌ <b>Error:</b> Unable to load prizes." if lang == "en" else "❌ <b>ስህተት፡</b> የሽልማት ዝርዝሩን መጫን አልተቻለም።"
         await message.answer(error_msg, parse_mode="HTML")
-
+    
 
 # --- 2. የክፍያ መመሪያ (Callback) ---
 @dp.callback_query(F.data == "show_payment")
