@@ -1,8 +1,8 @@
 import os
 import asyncio
 import random
-import html  # ለጸዳ የጽሁፍ አቀራረብ (Formatting)
-from aiogram.enums import ChatAction # ይህ ከላይ ከ import ጋር ይግባ
+import html  
+from aiogram.enums import ChatAction 
 from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -20,6 +20,7 @@ BASE_URL = os.getenv("WEBHOOK_URL")
 ADMIN_ID = os.getenv("ADMIN_ID") 
 CHANNEL_ID = -1003866954136  
 DEVELOPER_ID = os.getenv("DEVELOPER_ID")
+
 # --- 2. Initialization ---
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -38,35 +39,38 @@ class LotteryStates(StatesGroup):
     waiting_for_broadcast_range = State()   
 
 # --- 4. Helper Functions ---
-# --- 4. Helper Functions ---
+
 async def is_member(user_id: int) -> bool:
+    """ተጠቃሚው ቻናሉ ውስጥ መኖሩን ያረጋግጣል"""
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
+
+async def send_welcome_msg(message: types.Message, name: str, lang: str):
+    """ዋናውን ሜኑ (Welcome Message) የሚልክ ፈንክሽን"""
+    welcome_txt = f"👋 እንኳን ደህና መጡ <b>{name}</b>!" if lang == "am" else f"👋 Welcome <b>{name}</b>!"
+    await message.answer(welcome_txt, reply_markup=get_main_menu(lang), parse_mode="HTML")
+
 async def check_channel_membership(message: types.Message, state: FSMContext):
+    """የቻናል አባልነትን አይቶ ወደ ሜኑ ወይም ወደ ማስጠንቀቂያ የሚመራ"""
     user_id = message.from_user.id
     if await is_member(user_id):
-        # ዳታቤዝ ውስጥ የተጠቃሚውን ስም እና ቋንቋ መፈለግ
         res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
         lang = res.data[0]['lang'] if res.data else 'am'
         name = res.data[0]['full_name'] if res.data else message.from_user.full_name
-        
-        # ወደ ዋናው ሜኑ መውሰድ
         await send_welcome_msg(message, name, lang)
     else:
-        # ቻናል እንዲገባ መጠየቅ
         kb = InlineKeyboardBuilder()
         kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
         kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
         await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
-        
-        
-        
-        
+
 # --- 5. Keyboards ---
+
 def get_main_menu(lang="am"):
+    """ዋናውን የመልዕክት ቁልፎች (Reply Keyboard) የሚሰራ"""
     kb = ReplyKeyboardBuilder()
     if lang == "en":
         kb.button(text="➕ Buy New Ticket")
@@ -84,73 +88,47 @@ def get_main_menu(lang="am"):
         kb.button(text="🌐 ቋንቋ")
     kb.adjust(1, 2, 2, 1)
     return kb.as_markup(resize_keyboard=True)
-    
+
+# --- 6. Message Handlers ---
 
 @dp.message(Command("start"))
 async def start_handler(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     
     try:
-        # በቅድሚያ ተጠቃሚውን መፈለግ
+        # 1. ተጠቃሚው መኖሩን እና ስልክ ቁጥር እንዳለው ቼክ ማድረግ
         res = supabase.table("users").select("phone").eq("user_id", user_id).execute()
         
-        # ተጠቃሚው ካለ እና ስልክ ካለው በቀጥታ ወደ ቻናል ቼክ
         if res.data and res.data[0].get('phone'):
+            # ስልኩ ካለ በቀጥታ አባልነቱን ወደ ማረጋገጥ ይሄዳል
             return await check_channel_membership(message, state)
 
-        # አዲስ ተጠቃሚ ከሆነ ሪፈራል መያዝ
+        # 2. አዲስ ከሆነ ሪፈራል መያዝ
         if message.text and len(message.text.split()) > 1:
             ref_arg = message.text.split()[1]
             if ref_arg.isdigit() and int(ref_arg) != user_id:
                 await state.update_data(referred_by=int(ref_arg))
 
-        # ስልክ ቁጥር መጠየቅ
+        # 3. ስልክ ቁጥር መጠየቅ
         await state.set_state(LotteryStates.waiting_for_phone)
         kb = ReplyKeyboardBuilder()
         kb.row(types.KeyboardButton(text="📲 ስልክ ቁጥርዎን ያጋሩ / Share Contact", request_contact=True))
         
         await message.answer(
-            f"👋 ሰላም {html.escape(message.from_user.full_name)}!\nለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።",
+            f"👋 ሰላም {html.escape(message.from_user.full_name)}!\nለመቀጠል እባክዎ መጀመሪያ ስልክ ቁጥርዎን ያጋሩ።",
             reply_markup=kb.as_markup(resize_keyboard=True, one_time_keyboard=True)
         )
 
     except Exception as e:
         print(f"Start Logic Error: {e}")
-        # ዳታቤዝ ቢጠፋ እንኳ ስልክ እንዲጠይቅ ማድረግ (Fallback)
         await state.set_state(LotteryStates.waiting_for_phone)
-        await message.answer("ለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።")
-        
-# 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
-# 1. ትኬት ቁረጥ ሲባል የሚጀምረው ክፍል
-@dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
-async def buy_ticket_step1(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    # 1. ቻናል ውስጥ መኖሩን ቼክ ማድረግ
-    if not await is_member(user_id):
-        # ካልሆነ ወደ verify መልዕክት መላክ
-        kb = InlineKeyboardBuilder()
-        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
-        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
-        return await message.answer("⚠️ ትኬት ለመቁረጥ መጀመሪያ ቻናላችንን መቀላቀል አለብዎት!", reply_markup=kb.as_markup())
+        await message.answer("ሰላም! ለመቀጠል እባክዎ ስልክ ቁጥርዎን ያጋሩ።")
 
-    # 2. ዳታቤዝ ውስጥ መኖሩን ቼክ ማድረግ
-    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
-    if not res.data:
-        return await message.answer("⚠️ እባክዎ መጀመሪያ /start ብለው ይመዝገቡ።")
-
-    lang = res.data[0]['lang']
-    # 3. ወደ ክፍያ ሂደት ማለፍ
-    await show_prizes_and_pay(message, lang)
-    
-# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
-# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
 async def register_and_check_channel(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
     
-    # የራስን ስልክ መላኩን ማረጋገጥ
     if message.contact.user_id != user_id:
         return await message.answer("⚠️ እባክዎ የራስዎን ስልክ ቁጥር ያጋሩ!")
 
@@ -158,68 +136,68 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
     referrer_id = data.get("referred_by")
 
     try:
-        # መጀመሪያ ተጠቃሚው መኖሩን ማረጋገጥ
-        user_exists = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
-        
-        user_info = {
+        # ዳታቤዝ ላይ መኖሩን ቼክ አድርጎ መመዝገብ ወይም ማዘመን (Upsert)
+        supabase.table("users").upsert({
             "user_id": user_id,
             "username": message.from_user.username,
             "full_name": html.escape(message.from_user.full_name),
             "phone": phone,
+            "referred_by": referrer_id,
             "lang": "am"
-        }
-
-        if user_exists.data:
-            # ካለ ስልኩን ብቻ እናድሳለን
-            supabase.table("users").update({"phone": phone}).eq("user_id", user_id).execute()
-        else:
-            # ከሌለ አዲስ እንመዘግባለን
-            user_info["referred_by"] = referrer_id
-            supabase.table("users").insert(user_info).execute()
+        }).execute()
         
         await state.clear()
         
-        # ቻናል ውስጥ መኖሩን ቼክ ማድረግ
-        if await is_member(user_id):
-            # ቻናል ውስጥ ካለ ዋናው ሜኑ ይከፈትለታል
-            await message.answer("✅ ምዝገባዎ ተጠናቅቋል። እንኳን ደህና መጡ!", reply_markup=types.ReplyKeyboardRemove())
-            # እዚህ ጋር ዋናውን ሜኑ የሚከፍተውን ፈንክሽን ጥራ (ለምሳሌ send_welcome_msg)
-        else:
-            # ቻናል ውስጥ ካልሆነ እንዲገባ ይጠየቅ
-            kb = InlineKeyboardBuilder()
-            kb.row(types.InlineKeyboardButton(text="📢 ቻናላችንን ይቀላቀሉ", url="https://t.me/ethiouh"))
-            kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
-            await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
+        # ምዝገባው እንደተጠናቀቀ አባልነቱን ያረጋግጣል
+        await check_channel_membership(message, state)
 
     except Exception as e:
-        print(f"Error: {e}")
-        await message.answer("❌ ስህተት ተፈጥሯል። እባክዎ በሌላ ጊዜ ይሞክሩ።")
+        print(f"Registration Error: {e}")
+        await message.answer("❌ በምዝገባ ወቅት ስህተት ተፈጥሯል። እባክዎ ደግመው ይሞክሩ።")
+
+# --- 7. Callback Handlers ---
 
 @dp.callback_query(F.data == "check_join")
 async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     
-    # አባልነቱን በ is_member ፈንክሽን ቼክ ማድረግ
     if await is_member(user_id):
-        # 1. ዳታቤዝ ውስጥ ቋንቋውን እና ስሙን መፈለግ
+        # አባል ከሆነ መረጃውን አምጥቶ ሜኑውን ያሳያል
         res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
         lang = res.data[0]['lang'] if res.data else 'am'
         name = res.data[0]['full_name'] if res.data else callback.from_user.full_name
         
-        # 2. የእንኳን ደህና መጡ መልዕክት እና ዋና ሜኑ
-        await callback.answer("✅ ተረጋግጧል! እንኳን ደህና መጡ።", show_alert=False)
-        await callback.message.delete() # የነበረውን የ "Join Channel" መልዕክት ለማጥፋት
-        
+        await callback.answer("✅ ተረጋግጧል!")
+        await callback.message.delete()
         await send_welcome_msg(callback.message, name, lang)
     else:
-        # አባል ካልሆነ የሚመጣ ማስጠንቀቂያ
         await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ!", show_alert=True)
-        
+
+# --- 8. Feature Handlers ---
+
+@dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
+async def buy_ticket_handler(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     
+    # ሁልጊዜ ትኬት ከመቁረጡ በፊት አባልነቱን ቼክ ያደርጋል
+    if not await is_member(user_id):
+        kb = InlineKeyboardBuilder()
+        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
+        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+        return await message.answer("⚠️ ትኬት ለመቁረጥ መጀመሪያ ቻናላችንን መቀላቀል አለብዎት!", reply_markup=kb.as_markup())
+
+    res = supabase.table("users").select("lang").eq("user_id", user_id).execute()
+    if not res.data:
+        return await message.answer("⚠️ እባክዎ መጀመሪያ /start ብለው ይመዝገቡ።")
+
+    lang = res.data[0]['lang']
+    # ክፍያውን የሚያሳይ ፈንክሽን መጥራት (ይህ ፈንክሽን ቀሪው ኮድህ ውስጥ መኖሩን አረጋግጥ)
+    await show_prizes_and_pay(message, lang)
+            
 # --- 1. ሽልማቶችን የሚያሳይ ፈንክሽን ---
 async def show_prizes_and_pay(message: types.Message, lang: str):
     try:
-        # የዳታቤዝ ጥሪ (Optimization: የምንፈልገውን ብቻ)
+        # 1. የሽልማት መረጃን ከዳታቤዝ ማምጣት
         prizes_res = supabase.table("prizes").select("rank, amount").execute()
         prizes = prizes_res.data or []
         
@@ -227,33 +205,41 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
         if not prizes:
             prize_list = "⏳ <i>Prizes will be announced soon!</i>" if lang == "en" else "⏳ <i>ሽልማቶች በቅርቡ ይፋ ይሆናሉ!</i>"
         else:
-            # ሽልማቶችን በደረጃ (Rank) አስተካክሎ ማሳየት
-            for p in sorted(prizes, key=lambda x: x['rank']):
-                rank_icon = "🥇" if p['rank'] == 1 else "🥈" if p['rank'] == 2 else "🥉" if p['rank'] == 3 else "🏆"
-                prize_list += f"{rank_icon} <b>{p['rank']}ኛ ደረጃ:</b> <code>{p['amount']}</code>\n"
+            # ሽልማቶችን በደረጃ (Rank) አስተካክሎ መደርደር
+            sorted_prizes = sorted(prizes, key=lambda x: x['rank'])
+            for p in sorted_prizes:
+                rank = p['rank']
+                amount = p['amount']
+                icon = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "🏆"
+                
+                if lang == "am":
+                    prize_list += f"{icon} <b>{rank}ኛ ደረጃ:</b> <code>{amount} ብር</code>\n"
+                else:
+                    prize_list += f"{icon} <b>Rank {rank}:</b> <code>{amount} ETB</code>\n"
 
-        # ማራኪ UI ዲዛይን
+        # 2. እንደ ቋንቋው ጽሁፉን ማዘጋጀት
         if lang == "am":
-            info_text = (
-                "🎁 <b>ልዩ የሽልማት ዝርዝር</b> 🎁\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{prize_list}\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ETB</code>\n\n"
-                "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
-            )
-            pay_btn_text = "💳 ክፍያ ፈጽም"
+            title = "🎁 <b>ልዩ የሽልማት ዝርዝር</b> 🎁"
+            price_tag = "🎫 <b>የአንድ ትኬት ዋጋ:</b> <code>50 ብር</code>"
+            footer = "✨ <i>አሁኑኑ በመሳተፍ የዕድሉ ባለቤት ይሁኑ!</i>"
+            pay_btn_text = "💳 ክፍያ ለመፈጸም እዚህ ይጫኑ"
         else:
-            info_text = (
-                "🎁 <b>Exclusive Prize List</b> 🎁\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"{prize_list}\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                "🎫 <b>Ticket Price:</b> <code>50 ETB</code>\n\n"
-                "✨ <i>Join now and be our next winner!</i>"
-            )
-            pay_btn_text = "💳 Pay Now"
+            title = "🎁 <b>Exclusive Prize List</b> 🎁"
+            price_tag = "🎫 <b>Ticket Price:</b> <code>50 ETB</code>"
+            footer = "✨ <i>Join now and be our next winner!</i>"
+            pay_btn_text = "💳 Click here to Pay"
 
+        # 3. ሙሉ መልዕክቱን ማቀናጀት
+        info_text = (
+            f"{title}\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{prize_list}\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{price_tag}\n\n"
+            f"{footer}"
+        )
+
+        # 4. የክፍያ በተን (Inline Button)
         inline_kb = InlineKeyboardBuilder()
         inline_kb.row(types.InlineKeyboardButton(text=pay_btn_text, callback_data="show_payment"))
         
@@ -261,8 +247,9 @@ async def show_prizes_and_pay(message: types.Message, lang: str):
 
     except Exception as e:
         print(f"Prizes View Error: {e}")
-        await message.answer("❌ <b>Error:</b> Unable to load prizes.")
-
+        error_msg = "❌ <b>Error:</b> Unable to load prizes." if lang == "en" else "❌ <b>ስህተት:</b> የሽልማት ዝርዝሩን መጫን አልተቻለም።"
+        await message.answer(error_msg, parse_mode="HTML")
+            
 # --- 2. የክፍያ መመሪያ (Callback) ---
 @dp.callback_query(F.data == "show_payment")
 async def process_payment_info(callback: types.CallbackQuery, state: FSMContext):
