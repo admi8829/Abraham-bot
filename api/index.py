@@ -45,6 +45,23 @@ async def is_member(user_id: int) -> bool:
         return member.status in ["member", "administrator", "creator"]
     except Exception:
         return False
+async def check_channel_membership(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    if await is_member(user_id):
+        # ዳታቤዝ ውስጥ የተጠቃሚውን ስም እና ቋንቋ መፈለግ
+        res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
+        lang = res.data[0]['lang'] if res.data else 'am'
+        name = res.data[0]['full_name'] if res.data else message.from_user.full_name
+        
+        # ወደ ዋናው ሜኑ መውሰድ
+        await send_welcome_msg(message, name, lang)
+    else:
+        # ቻናል እንዲገባ መጠየቅ
+        kb = InlineKeyboardBuilder()
+        kb.row(types.InlineKeyboardButton(text="📢 Join Our Channel", url="https://t.me/ethiouh"))
+        kb.row(types.InlineKeyboardButton(text="🔄 አረጋግጥ / Verify", callback_data="check_join"))
+        await message.answer("⚠️ ለመቀጠል እባክዎ ቻናላችንን ይቀላቀሉ!", reply_markup=kb.as_markup())
+        
         
         
         
