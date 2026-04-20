@@ -49,10 +49,39 @@ async def is_member(user_id: int) -> bool:
         return False
 
 async def send_welcome_msg(message: types.Message, name: str, lang: str):
-    """ዋናውን ሜኑ (Welcome Message) የሚልክ ፈንክሽን"""
-    welcome_txt = f"👋 እንኳን ደህና መጡ <b>{name}</b>!" if lang == "am" else f"👋 Welcome <b>{name}</b>!"
-    await message.answer(welcome_txt, reply_markup=get_main_menu(lang), parse_mode="HTML")
+    """ተጠቃሚው ምዝገባ ሲጨርስ የሚላክ የሰላምታ እና የዋና ሜኑ መልዕክት"""
     
+    # 1. እንደ ቋንቋው መልዕክቱን ማዘጋጀት
+    if lang == "am":
+        welcome_text = (
+            f"<b>🎉 እንኳን ደህና መጡ {name}! 🎉</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "የዕድሉ ባለቤት ለመሆን ዝግጁ ነዎት? ከታች ያሉትን አማራጮች "
+            "በመጠቀም ትኬት መቁረጥ ወይም መረጃዎችን ማየት ይችላሉ።\n\n"
+            "🚀 <b>መልካም ዕድል እንመኝልዎታለን!</b>"
+        )
+    else:
+        welcome_text = (
+            f"<b>🎉 Welcome {name}! 🎉</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Are you ready to be our next winner? Use the menu below "
+            "to buy tickets or check draw information.\n\n"
+            "🚀 <b>We wish you the best of luck!</b>"
+        )
+
+    try:
+        # 2. መልዕክቱን ከዋናው ሜኑ (Buttons) ጋር መላክ
+        # ማሳሰቢያ፡ መልዕክቱ በ callback_query በኩል ከተጠራ message.answer መጠቀም የተሻለ ነው
+        await message.answer(
+            welcome_text,
+            reply_markup=get_main_menu(lang),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"Welcome Message Error: {e}")
+        # ድንገት ስህተት ቢፈጠር እንኳ ተጠቃሚው ሜኑውን እንዲያገኝ
+        await message.answer("Main Menu:", reply_markup=get_main_menu(lang))
+        
 async def check_channel_membership(message: types.Message, state: FSMContext):
     """የቻናል አባልነትን አይቶ ወደ ሜኑ ወይም ወደ ማስጠንቀቂያ የሚመራ"""
     user_id = message.from_user.id
