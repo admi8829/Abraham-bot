@@ -727,6 +727,7 @@ async def show_winners(message: types.Message):
         await message.answer(error_msg, parse_mode="HTML")
         print(f"DEBUG ERROR: {e}") # ለ Vercel Log እንዲመች
 
+
 @dp.message(F.text.in_({"👥 ጓደኛ ጋብዝ", "👥 Invite Friends"}))
 async def invite_friends_handler(message: types.Message):
     user_id = message.from_user.id
@@ -742,7 +743,7 @@ async def invite_friends_handler(message: types.Message):
     except:
         lang = 'en'
 
-    # 3. ስንት ሰው እንደጋበዙ ከዳታቤዝ መቁጠር (በትክክል ይቆጥራል)
+    # 3. የግብዣ ብዛት መቁጠር
     try:
         ref_count_res = supabase.table("users").select("user_id", count="exact").eq("referred_by", str(user_id)).execute()
         count = ref_count_res.count if ref_count_res.count is not None else 0
@@ -750,37 +751,57 @@ async def invite_friends_handler(message: types.Message):
         count = 0
 
     if lang == "am":
-        text = (
-            "<b>👥 ጓደኞችዎን ይጋብዙና የዕድል ባለቤት ይሁኑ!</b>\n"
+        # ለቦቱ ተጠቃሚ የሚታይ (Internal Text)
+        main_text = (
+            "<b>👥 ጓደኞችዎን ይጋብዙና የዕድሉ ተጠቃሚ ይሁኑ!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "ይህንን ቦት ለጓደኞችዎ በማጋራት ብዙ ሰዎች ሲመዘገቡ የእርስዎም የማሸነፍ ዕድል ይጨምራል!\n\n"
-            f"🔗 <b>የእርስዎ የመጋበዣ ሊንክ፦</b>\n<code>{invite_link}</code>\n\n"
-            f"📊 <b>እስካሁን የጋበዙት ሰው ብዛት፦</b> <b>{count} ሰዎች</b>\n"
+            "የእርስዎን ልዩ የግብዣ ሊንክ ለሌሎች በማጋራት ተጠቃሚዎችን ሲጨምሩ "
+            "የማሸነፍ ዕድልዎን በከፍተኛ ሁኔታ ያሳድጋሉ።\n\n"
+            f"🔗 <b>የእርስዎ ሊንክ፦</b>\n<code>{invite_link}</code>\n\n"
+            f"📊 <b>እስካሁን የጋበዙት፦</b> <b>{count} ሰዎች</b>\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "✨ <i>ሊንኩን ተጭነው ለጓደኞችዎ በማጋራት አሁኑኑ መጋበዝ ይጀምሩ!</i>"
+            "💡 <b>ጠቃሚ ምክር፦</b> ሊንኩን በቴሌግራም ግሩፖች እና ለቅርብ ጓደኞችዎ በመላክ "
+            "የጋባዥነት ውጤትዎን ያሳድጉ!"
         )
-        share_text = f"🎁 ትኬት በመቁረጥ የዕጣው ተሸላሚ ይሁኑ! ለመመዝገብ ይህንን ሊንክ ይጫኑ፦\n{invite_link}"
-        btn_msg = "📲 ለጓደኛ አጋራ (Share)"
+        # ለሌሎች ሰዎች ሲላክ የሚታይ (Motivational Share Text)
+        share_text = (
+            "ሰላም! 👋 አንድ አስደሳች ዜና ላጋራህ። "
+            "በዚህ አዲስ የሎተሪ ቦት ላይ ትኬት በመቁረጥ እጅግ አስደሳች ሽልማቶችን ማሸነፍ ትችላለህ! 🎁 "
+            "እኔም እየተሳተፍኩ ነው፤ አንተም ዕድልህን ሞክር። ለመጀመር ከታች ያለውን ሊንክ ተጫን፦"
+        )
+        btn_msg = "📲 አሁኑኑ አጋራ (Share Link)"
     else:
-        text = (
-            "<b>👥 Invite Friends & Win Big!</b>\n"
+        # Internal Text
+        main_text = (
+            "<b>👥 Invite Friends & Boost Your Luck!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Invite your friends to the bot and increase your chances of winning great prizes!\n\n"
-            f"🔗 <b>Your Unique Invite Link:</b>\n<code>{invite_link}</code>\n\n"
-            f"📊 <b>Total Friends Invited:</b> <b>{count} people</b>\n"
+            "The more friends you bring to this platform, the higher your chances "
+            "of becoming our next big winner!\n\n"
+            f"🔗 <b>Your Unique Link:</b>\n<code>{invite_link}</code>\n\n"
+            f"📊 <b>Total Referrals:</b> <b>{count} people</b>\n\n"
             "━━━━━━━━━━━━━━━━━━━━━\n"
-            "✨ <i>Share the link and start inviting now!</i>"
+            "💡 <b>Tip:</b> Share your link in Telegram groups and to your "
+            "contacts to increase your referral score!"
         )
-        share_text = f"🎁 Buy a ticket and be our next winner! Join here to start:\n{invite_link}"
-        btn_msg = "📲 Share Link to Friends"
+        # Motivational Share Text
+        share_text = (
+            "Hello! 👋 Check out this amazing lottery bot. "
+            "You can win exclusive prizes just by getting a ticket! 🎁 "
+            "I'm already in, don't miss out on your chance. Click the link below to start:"
+        )
+        btn_msg = "📲 Share Now"
 
-    # 4. የቀጥታ ማጋሪያ ቁልፍ (Share Button)
-    # ማሳሰቢያ፡ ሊንኩ በ share_text ውስጥ እንዲካተት ተደርጓል
-    share_url = f"https://t.me/share/url?url={invite_link}&text={share_text}"
+    # 4. የ Share URL አሰራር (ሊንኩ እንዳይደጋገም url እና text ተለይተዋል)
+    from aiogram.utils.deep_linking import create_start_link
+    import urllib.parse
+    
+    encoded_text = urllib.parse.quote(share_text)
+    share_url = f"https://t.me/share/url?url={invite_link}&text={encoded_text}"
+    
     kb = InlineKeyboardBuilder()
     kb.row(types.InlineKeyboardButton(text=btn_msg, url=share_url))
     
-    await message.answer(text, reply_markup=kb.as_markup(), parse_mode="HTML")
+    await message.answer(main_text, reply_markup=kb.as_markup(), parse_mode="HTML")
     
 
 # 3. አድሚኑ ሲያጸድቅ
