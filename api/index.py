@@ -248,55 +248,50 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
         print(f"Registration Error: {e}")
         await message.answer("❌ Registration error. Please try again.\n❌ በምዝገባ ወቅት ስህተት ተፈጥሯል። እባክዎ ደግመው ይሞክሩ።")
 
-# --- 7. Callback Handlers (Verify Button) ---
-
+# --- 7. Callback Handlers (Verify Button) --
 @dp.callback_query(F.data == "check_join")
 async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     
-    if await is_member(user_id):
-        # አባል ከሆነ መረጃውን አምጥቶ ሜኑውን ያሳያል
-        res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
-        
-        # ዳታቤዝ ውስጥ ቋንቋው ካልተገኘ default 'en' ይሆናል
-        lang = res.data[0]['lang'] if (res.data and 'lang' in res.data[0]) else 'en'
-        name = res.data[0]['full_name'] if (res.data and 'full_name' in res.data[0]) else callback.from_user.full_name
-        
-        success_msg = "✅ Verified! Welcome." if lang == "en" else "✅ ተረጋግጧል! እንኳን ደህና መጡ።"
-        await callback.answer(success_msg, show_alert=False)
-        
-        # የነበረውን የ "Join Channel" መልዕክት ማጥፋት
-        await callback.message.delete()
-        
-        # ወደ ዋናው ሜኑ መውሰድ
-        await send_welcome_msg(callback.message, name, lang)
-    else:
-        # አባል ካልሆነ የሚመጣ ማስጠንቀቂያ (በሁለቱም ቋንቋ)
-        warning_text = (
-            "⚠️ You haven't joined the channel yet!\n"
-            "⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ!"
-        )
-        await callback.answer(warning_text, show_alert=True)
-        
-
-# --- 7. Callback Handlers ---
-
-@dp.callback_query(F.data == "check_join")
-async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
+    # 1. አባልነቱን ቼክ ማድረግ
+    is_joined = await is_member(user_id)
     
-    if await is_member(user_id):
-        # አባል ከሆነ መረጃውን አምጥቶ ሜኑውን ያሳያል
+    try:
+        # ዳታቤዝ ውስጥ የተጠቃሚውን መረጃ መፈለግ
         res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
-        lang = res.data[0]['lang'] if res.data else 'am'
-        name = res.data[0]['full_name'] if res.data else callback.from_user.full_name
+        user_info = res.data[0] if res.data else {}
         
-        await callback.answer("✅ ተረጋግጧል!")
-        await callback.message.delete()
-        await send_welcome_msg(callback.message, name, lang)
-    else:
-        await callback.answer("⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ!", show_alert=True)
+        lang = user_info.get('lang', 'en') # በዳታቤዝ ከሌለ default 'en'
+        name = user_info.get('full_name', callback.from_user.full_name)
 
+        if is_joined:
+            # ✅ አባል ከሆነ፡
+            success_msg = "✅ Verified! Welcome." if lang == "en" else "✅ ተረጋግጧል! እንኳን ደህና መጡ።"
+            
+            # አጭር የኖቲፊኬሽን መልዕክት (Toast)
+            await callback.answer(success_msg)
+            
+            # የቆየውን የ "Join Channel" ግብዣ ማጥፋት
+            await callback.message.delete()
+            
+            # ወደ ዋናው ሜኑ መውሰድ
+            await send_welcome_msg(callback.message, name, lang)
+        else:
+            # ❌ አባል ካልሆነ፡
+            # ማስጠንቀቂያው እንደ ተጠቃሚው ቋንቋ እንዲሆን
+            if lang == "am":
+                warning_text = "⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ እና ድጋሚ 'አረጋግጥ'ን ይጫኑ።"
+            else:
+                warning_text = "⚠️ You haven't joined the channel yet! Please join and click 'Verify' again."
+            
+            # በ Alert (Pop-up) መልኩ ማሳየት
+            await callback.answer(warning_text, show_alert=True)
+
+    except Exception as e:
+        print(f"Verify Callback Error: {e}")
+        # በድንገት ዳታቤዝ ቢጠፋ እንኳ ለተጠቃሚው ምላሽ መስጠት
+        await callback.answer("⚠️ Connection error. Please try again.", show_alert=True)
+        
 # --- 8. Feature Handlers ---
 
 @dp.message(F.text.in_({"➕ አዲስ ትኬት ቁረጥ", "➕ Buy New Ticket"}))
