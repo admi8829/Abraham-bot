@@ -145,28 +145,31 @@ async def start_handler(message: types.Message, state: FSMContext):
         print(f"Start Process Error: {e}")
         await state.set_state(LotteryStates.waiting_for_phone)
         await message.answer("Please share your contact number to get started.")
-
+# --- 4. ተጠቃሚው ስልኩን ሲልክ የሚሰራው ክፍል ---
 
 @dp.message(LotteryStates.waiting_for_phone, F.contact)
 async def register_and_check_channel(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     phone = message.contact.phone_number
+    first_name = html.escape(message.from_user.first_name)
     
+    # የራስን ስልክ መላኩን ማረጋገጥ (Security Check)
     if message.contact.user_id != user_id:
-        return await message.answer("⚠️ እባክዎ የራስዎን ስልክ ቁጥር ያጋሩ!")
+        return await message.answer("⚠️ Please share your own contact number!\n⚠️ እባክዎ የራስዎን ስልክ ቁጥር ያጋሩ!")
 
     data = await state.get_data()
     referrer_id = data.get("referred_by")
 
     try:
-        # ዳታቤዝ ላይ መኖሩን ቼክ አድርጎ መመዝገብ ወይም ማዘመን (Upsert)
+        # ዳታቤዝ ላይ መረጃውን ማዘመን (Upsert)
+        # Default lang is English ('en') as requested
         supabase.table("users").upsert({
             "user_id": user_id,
             "username": message.from_user.username,
-            "full_name": html.escape(message.from_user.full_name),
+            "full_name": first_name,
             "phone": phone,
             "referred_by": referrer_id,
-            "lang": "am"
+            "lang": "en" 
         }).execute()
         
         await state.clear()
@@ -176,7 +179,38 @@ async def register_and_check_channel(message: types.Message, state: FSMContext):
 
     except Exception as e:
         print(f"Registration Error: {e}")
-        await message.answer("❌ በምዝገባ ወቅት ስህተት ተፈጥሯል። እባክዎ ደግመው ይሞክሩ።")
+        await message.answer("❌ Registration error. Please try again.\n❌ በምዝገባ ወቅት ስህተት ተፈጥሯል። እባክዎ ደግመው ይሞክሩ።")
+
+# --- 7. Callback Handlers (Verify Button) ---
+
+@dp.callback_query(F.data == "check_join")
+async def verify_membership(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    if await is_member(user_id):
+        # አባል ከሆነ መረጃውን አምጥቶ ሜኑውን ያሳያል
+        res = supabase.table("users").select("lang", "full_name").eq("user_id", user_id).execute()
+        
+        # ዳታቤዝ ውስጥ ቋንቋው ካልተገኘ default 'en' ይሆናል
+        lang = res.data[0]['lang'] if (res.data and 'lang' in res.data[0]) else 'en'
+        name = res.data[0]['full_name'] if (res.data and 'full_name' in res.data[0]) else callback.from_user.full_name
+        
+        success_msg = "✅ Verified! Welcome." if lang == "en" else "✅ ተረጋግጧል! እንኳን ደህና መጡ።"
+        await callback.answer(success_msg, show_alert=False)
+        
+        # የነበረውን የ "Join Channel" መልዕክት ማጥፋት
+        await callback.message.delete()
+        
+        # ወደ ዋናው ሜኑ መውሰድ
+        await send_welcome_msg(callback.message, name, lang)
+    else:
+        # አባል ካልሆነ የሚመጣ ማስጠንቀቂያ (በሁለቱም ቋንቋ)
+        warning_text = (
+            "⚠️ You haven't joined the channel yet!\n"
+            "⚠️ አሁንም ቻናሉን አልተቀላቀሉም። እባክዎ መጀመሪያ ይቀላቀሉ!"
+        )
+        await callback.answer(warning_text, show_alert=True)
+        
 
 # --- 7. Callback Handlers ---
 
